@@ -26,18 +26,25 @@ That opens `http://127.0.0.1:8765` in your browser. Its only prerequisite is
 PlatformIO on your `PATH` — pyserial, which it needs for the serial capture,
 ships with PlatformIO.
 
-### Work down the page
+The home page has one tile per task, each showing where you have got to —
+which credentials are set, which hub addresses are captured, how many remotes
+are ready to flash. Work through them in this order the first time.
 
-**1 · Credentials.** WiFi network and password, MQTT broker host, port,
-username and password, and an OTA password of your choosing. **Save
-credentials.** Only the hubs use these; a remote never joins WiFi.
+### Credentials
 
-**2 · Radio and topics.** Set **WiFi channel** to the channel your access point
-actually runs on, and lock the AP to it. This is the single most common reason
-a remote does nothing — ESP-NOW has no channel of its own. See
-[Radio channel](#radio-channel).
+WiFi network and password, MQTT broker host, port, username and password, and
+an OTA password of your choosing. **Save credentials.** Only the hubs use
+these; a remote never joins WiFi.
 
-**3 · Base stations.** For each hub you own:
+### Radio &amp; topics
+
+Set **WiFi channel** to the channel your access point actually runs on, and
+lock the AP to it. This is the single most common reason a remote does nothing
+— ESP-NOW has no channel of its own. See [Radio channel](#radio-channel).
+
+### Base stations
+
+For each hub you own:
 
 - Plug it in and pick its **serial port**.
 - **Flash over USB.** For the WT32-ETH01, follow the five wiring steps on its
@@ -50,13 +57,17 @@ You only need the hub you actually have. A remote can only be pointed at a hub
 whose address is known, and the app will say so rather than building firmware
 that transmits into nothing.
 
-**4 · Remotes.** One row per physical remote. The **location** becomes part of
-the MQTT topic, so it is lowercase, underscores only, 15 characters at most.
-The **display name** is what Home Assistant shows. **Talks to** picks which hub
-it unicasts to. Then **Save configuration**.
+### Remotes
 
-**5 · Flash a remote.** Pick the remote and its port, and flash. Reflash a
-remote whenever its hub's address changes.
+One row per physical remote. The **location** becomes part of the MQTT topic,
+so it is lowercase, underscores only, 15 characters at most. The **display
+name** is what Home Assistant shows. **Talks to** picks which hub it unicasts
+to. Then **Save configuration**.
+
+### Flash a remote
+
+Pick the remote and its port, and flash. Reflash a remote whenever its hub's
+address changes.
 
 Nothing needs adding to `configuration.yaml` — once a hub connects, Home
 Assistant discovers every device and entity. To give the buttons behaviour, see

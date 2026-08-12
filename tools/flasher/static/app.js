@@ -5,10 +5,87 @@ const SECRET_FIELDS = [
   "MQTT_USERNAME", "MQTT_PASSWORD", "OTA_PASSWORD",
 ];
 
+const PAGES = {
+  home: {
+    title: "Remote Firmware Flasher",
+    sub: "Flash a hub, read its ESP-NOW address off the boot log, then flash remotes that talk to it.",
+  },
+  credentials: { title: "Credentials", sub: "WiFi, MQTT broker and OTA passwords." },
+  radio: { title: "Radio & topics", sub: "Channel, MQTT topic root and hold threshold." },
+  hubs: { title: "Base stations", sub: "Flash a hub, then capture the address remotes transmit to." },
+  remotes: { title: "Remotes", sub: "One row per physical handset." },
+  flash: { title: "Flash a remote", sub: "Build a handset's firmware and upload it over USB." },
+};
+
 let state = null;
+let secrets = null;
 let stream = null;
 
 const $ = (id) => document.getElementById(id);
+
+// ---------------------------------------------------------------------------
+// routing
+// ---------------------------------------------------------------------------
+
+function currentPage() {
+  const name = (location.hash || "#/home").replace(/^#\/?/, "") || "home";
+  return PAGES[name] ? name : "home";
+}
+
+function route() {
+  const page = currentPage();
+  Object.keys(PAGES).forEach((name) => {
+    const view = $(`view-${name}`);
+    if (view) view.hidden = name !== page;
+  });
+  $("page-title").textContent = PAGES[page].title;
+  $("page-sub").textContent = PAGES[page].sub;
+  $("home-btn").hidden = page === "home";
+  if (page === "home") refreshTiles();
+  window.scrollTo(0, 0);
+}
+
+function go(page) {
+  location.hash = `#/${page}`;
+}
+
+window.addEventListener("hashchange", route);
+$("home-btn").onclick = () => go("home");
+document.querySelectorAll("[data-go]").forEach((el) => {
+  el.onclick = () => go(el.dataset.go);
+});
+
+/** Home tiles double as a status board, so the page is worth returning to. */
+function refreshTiles() {
+  if (!state) return;
+
+  const haveSecrets = secrets && secrets.WIFI_SSID && secrets.MQTT_HOST;
+  setTile("t-credentials",
+    haveSecrets ? `${secrets.WIFI_SSID} · ${secrets.MQTT_HOST}` : "not set yet",
+    haveSecrets ? "ok" : "missing");
+
+  setTile("t-radio", `channel ${state.wifi_channel} · ${state.topic_root}/`, "ok");
+
+  const captured = ["wired", "wireless"].filter((h) => (state[`hub_mac_${h}`] || "").trim());
+  setTile("t-hubs",
+    captured.length ? `${captured.join(" and ")} address captured` : "no address captured",
+    captured.length ? "ok" : "missing");
+
+  const n = state.remotes.length;
+  setTile("t-remotes", n === 1 ? "1 remote" : `${n} remotes`, n ? "ok" : "missing");
+
+  const ready = state.remotes.filter((r) => (state[`hub_mac_${r.hub}`] || "").trim()).length;
+  setTile("t-flash",
+    ready ? `${ready} ready to flash` : "capture a hub address first",
+    ready ? "ok" : "missing");
+}
+
+function setTile(id, text, kind) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = "tile-status " + kind;
+}
 
 // ---------------------------------------------------------------------------
 // log panel
@@ -62,16 +139,20 @@ async function api(path, body) {
 
 function status(el, text, kind) {
   el.textContent = text;
-  el.className = "status" + (kind ? " " + kind : "");
+  el.className = (el.classList.contains("config-status") ? "status config-status" : "status")
+    + (kind ? " " + kind : "");
+}
+
+/** The same message on whichever page you happen to be looking at. */
+function configStatus(text, kind) {
+  document.querySelectorAll(".config-status").forEach((el) => status(el, text, kind));
 }
 
 function busy(on, label) {
   document.querySelectorAll("button[data-flash],button[data-capture],button[data-ota],#flash-remote")
     .forEach((b) => { b.disabled = on; });
   $("cancel").disabled = !on;
-  $("joblabel").innerHTML = on
-    ? `<span class="spin"></span>${label}`
-    : (label || "Idle");
+  $("joblabel").innerHTML = on ? `<span class="spin"></span>${label}` : (label || "Idle");
 }
 
 /** Tail a job's output, resolving with its exit code. */
@@ -108,7 +189,7 @@ function follow(jobId, label, onLine) {
 
 function renderPorts(ports) {
   const options = ports.length
-    ? ports.map((p) => `<option value="${p.device}">${p.device}${p.description ? " — " + p.description : ""}</option>`).join("")
+    ? ports.map((p) => `<option value="${escapeAttr(p.device)}">${escapeAttr(p.device)}${p.description ? " — " + escapeAttr(p.description) : ""}</option>`).join("")
     : `<option value="">no serial ports found</option>`;
   ["port-wireless", "port-wired", "port-remote"].forEach((id) => {
     const sel = $(id);
@@ -141,10 +222,12 @@ function renderRemotes() {
           </select></td>
       <td><button class="small danger" data-remove="${index}">Remove</button></td>`;
     tr.querySelectorAll("[data-field]").forEach((input) => {
-      input.oninput = () => {
+      const handler = () => {
         state.remotes[index][input.dataset.field] = input.value;
         renderRemoteTargets();
       };
+      input.oninput = handler;
+      input.onchange = handler;
     });
     tr.querySelector("[data-remove]").onclick = () => {
       state.remotes.splice(index, 1);
@@ -160,13 +243,14 @@ function renderRemoteTargets() {
   const previous = sel.value;
   sel.innerHTML = state.remotes
     .filter((r) => r.location.trim())
-    .map((r) => `<option value="remote_${r.location.trim()}">${escapeAttr(r.name || r.location)} — remote_${escapeAttr(r.location.trim())}</option>`)
+    .map((r) => `<option value="remote_${escapeAttr(r.location.trim())}">${escapeAttr(r.name || r.location)} — remote_${escapeAttr(r.location.trim())}</option>`)
     .join("") || `<option value="">no remotes configured</option>`;
   if (previous) sel.value = previous;
 }
 
 function escapeAttr(value) {
-  return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +258,7 @@ function escapeAttr(value) {
 // ---------------------------------------------------------------------------
 
 function collectState() {
+  // Hidden views keep their inputs in the DOM, so this is correct from any page.
   return {
     wifi_channel: Number($("wifi_channel").value),
     topic_root: $("topic_root").value,
@@ -191,6 +276,7 @@ function collectState() {
 async function load() {
   const data = await api("/api/state");
   state = data.state;
+  secrets = data.secrets;
   SECRET_FIELDS.forEach((f) => { $(f).value = data.secrets[f] || ""; });
   $("wifi_channel").value = state.wifi_channel;
   $("topic_root").value = state.topic_root;
@@ -200,6 +286,7 @@ async function load() {
   renderPorts(data.ports);
   renderRemotes();
   renderMacBadges();
+  refreshTiles();
 }
 
 $("save-secrets").onclick = async () => {
@@ -208,22 +295,27 @@ $("save-secrets").onclick = async () => {
   status($("secrets-status"), "saving…", "busy");
   try {
     await api("/api/secrets", payload);
+    secrets = payload;
     status($("secrets-status"), "written to include/secrets.h", "ok");
   } catch (err) {
     status($("secrets-status"), err.message, "bad");
   }
 };
 
-$("save-config").onclick = async () => {
-  status($("config-status"), "saving…", "busy");
-  try {
-    await api("/api/config", collectState());
-    status($("config-status"), "device_config.h and platformio_local.ini written", "ok");
-    renderRemoteTargets();
-  } catch (err) {
-    status($("config-status"), err.message, "bad");
-  }
-};
+document.querySelectorAll(".save-config").forEach((btn) => {
+  btn.onclick = async () => {
+    configStatus("saving…", "busy");
+    try {
+      const next = collectState();
+      await api("/api/config", next);
+      Object.assign(state, next);
+      configStatus("device_config.h and platformio_local.ini written", "ok");
+      renderRemoteTargets();
+    } catch (err) {
+      configStatus(err.message, "bad");
+    }
+  };
+});
 
 $("add-remote").onclick = () => {
   state.remotes.push({ location: "", name: "", hub: "wired" });
@@ -239,16 +331,21 @@ document.querySelectorAll("button[data-flash]").forEach((btn) => {
   btn.onclick = async () => {
     const port = $(btn.dataset.port).value;
     if (!port) { openLog(); append("[flasher] no serial port selected"); return; }
-    const { job } = await api("/api/flash", { environment: btn.dataset.flash, port });
-    await follow(job, `${btn.dataset.flash} → ${port}`);
+    try {
+      const { job } = await api("/api/flash", { environment: btn.dataset.flash, port });
+      await follow(job, `${btn.dataset.flash} → ${port}`);
+    } catch (err) {
+      openLog();
+      append(`[flasher] ${err.message}`);
+    }
   };
 });
 
 // over-the-air
 document.querySelectorAll("button[data-ota]").forEach((btn) => {
   btn.onclick = async () => {
-    const host = btn.dataset.ota === "hub_ota" ? "esp_hub_wifi.local" : "esp_hub_eth.local";
-    const target = prompt("Hostname or IP of the hub to reflash:", host);
+    const suggested = btn.dataset.ota === "hub_ota" ? "esp_hub_wifi.local" : "esp_hub_eth.local";
+    const target = prompt("Hostname or IP of the hub to reflash:", suggested);
     if (!target) return;
     try {
       const { job } = await api("/api/flash", { environment: btn.dataset.ota, port: target });
@@ -268,15 +365,20 @@ document.querySelectorAll("button[data-capture]").forEach((btn) => {
     if (!port) { openLog(); append("[flasher] no serial port selected"); return; }
     const reset = btn.dataset.noreset !== "1";
     let captured = null;
-    const { job } = await api("/api/capture", { port, reset, timeout: 30 });
-    await follow(job, `capture on ${port}`, (line) => {
-      const marker = line.indexOf("##MAC##");
-      if (marker === 0) captured = line.slice(7).trim();
-    });
+    try {
+      const { job } = await api("/api/capture", { port, reset, timeout: 30 });
+      await follow(job, `capture on ${port}`, (line) => {
+        if (line.startsWith("##MAC##")) captured = line.slice(7).trim();
+      });
+    } catch (err) {
+      openLog();
+      append(`[flasher] ${err.message}`);
+      return;
+    }
     if (captured) {
       $(`hub_mac_${hub}`).value = captured;
       renderMacBadges();
-      status($("config-status"), `captured ${captured} — save the configuration to use it`, "ok");
+      configStatus(`captured ${captured} — save the configuration to use it`, "ok");
     }
   };
 });
@@ -286,8 +388,13 @@ $("flash-remote").onclick = async () => {
   const port = $("port-remote").value;
   if (!environment) { openLog(); append("[flasher] no remote configured"); return; }
   if (!port) { openLog(); append("[flasher] no serial port selected"); return; }
-  const { job } = await api("/api/flash", { environment, port });
-  await follow(job, `${environment} → ${port}`);
+  try {
+    const { job } = await api("/api/flash", { environment, port });
+    await follow(job, `${environment} → ${port}`);
+  } catch (err) {
+    openLog();
+    append(`[flasher] ${err.message}`);
+  }
 };
 
 // Boards come and go on USB; keep the port lists honest without a refresh.
@@ -298,6 +405,10 @@ setInterval(async () => {
     renderPorts(ports);
   } catch (_) { /* server gone; the next action will report it */ }
 }, 4000);
+
+// Route first, so navigation still works if the server cannot be reached and
+// the page is not left showing nothing.
+route();
 
 load().catch((err) => {
   openLog();
