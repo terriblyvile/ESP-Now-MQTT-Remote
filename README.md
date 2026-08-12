@@ -156,8 +156,16 @@ Two more things worth knowing:
   `.pio/`, with toolchain paths that only make sense inside their own
   environment. Switching means `rm -rf .pio` first.
 - **Generated files** are written into your working copy through the bind
-  mount. `user: "${UID:-1000}:${GID:-1000}"` keeps them owned by you rather
-  than root; export `UID` and `GID` first, or edit those defaults.
+  mount. The container starts as root and immediately becomes whoever owns the
+  mounted project, so they come out owned by you and nothing needs configuring.
+  To pin a specific uid instead:
+
+  ```bash
+  FLASHER_UID=$(id -u) FLASHER_GID=$(id -g) docker compose up -d
+  ```
+
+  Deliberately not named `UID`/`GID`: those are readonly in bash and zsh, so
+  `export UID=$(id -u)` fails.
 
 The compose file publishes to `127.0.0.1` on purpose. The API writes
 credentials and runs builds, so it must not be reachable from your network.

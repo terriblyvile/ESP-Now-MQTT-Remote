@@ -48,10 +48,13 @@ services:
       # ~500MB of ESP32 toolchain. Named so a rebuild does not refetch it.
       - pio-cache:/pio
 
-    # Generated files are owned by you rather than root. Export UID and GID
-    # first, or compose substitutes the defaults:
-    #   export UID=$(id -u) GID=$(id -g)
-    user: "${UID:-1000}:${GID:-1000}"
+    # Starts as root and immediately becomes whoever owns the mounted project,
+    # so generated files come out owned by you without you having to look your
+    # uid up. Override only if you need a specific one -- and note these are
+    # deliberately not called UID/GID, which are readonly in bash and zsh and
+    # therefore cannot be set the way you would expect:
+    #   FLASHER_UID=$(id -u) FLASHER_GID=$(id -g) docker compose up -d
+    user: "${FLASHER_UID:-0}:${FLASHER_GID:-0}"
 
     # ---- serial access, Linux only -------------------------------------
     # Uncomment and set to your board's actual device. `ls /dev/ttyUSB*` or

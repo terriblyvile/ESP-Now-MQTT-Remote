@@ -191,6 +191,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"ok": True})
         except config_store.ConfigError as exc:
             return self._send_json({"error": str(exc)}, status=400)
+        except PermissionError as exc:
+            # Almost always a container running as a uid that does not own the
+            # mounted project. The raw errno tells you nothing about that.
+            return self._send_json(
+                {
+                    "error": f"Cannot write {exc.filename or 'the config'}: "
+                    f"permission denied. The flasher is running as uid "
+                    f"{os.getuid()}, which cannot write to your project "
+                    f"directory. In Docker, set FLASHER_UID and FLASHER_GID to "
+                    f"your own (`id -u` and `id -g`) and restart."
+                },
+                status=500,
+            )
         except RuntimeError as exc:
             # One job at a time; not a server fault, so say so plainly.
             return self._send_json({"error": str(exc)}, status=409)
@@ -283,6 +296,39 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
 
+def _drop_privileges():
+    """When running as root over a bind mount, become the project's owner.
+
+    A container starts as root unless told otherwise, and the project arrives
+    as a bind mount owned by whoever owns it on the host. Writing
+    include/secrets.h as root would either leave root-owned files strewn
+    through someone's working copy, or -- far more often -- fail outright,
+    because the pinned uid in the compose file was never the right one.
+
+    Adopting the mount's owner makes that correct without anyone having to
+    discover their uid. Done here rather than in a shell entrypoint so it needs
+    no extra binaries in the image, and so a plain `sudo python3 app.py` behaves
+    the same way.
+    """
+    if os.name != "posix" or not hasattr(os, "geteuid") or os.geteuid() != 0:
+        return  # Not root: nothing to drop, and nothing we could do anyway.
+    try:
+        st = os.stat(config_store.ROOT)
+    except OSError:
+        return
+    if st.st_uid == 0:
+        return  # Genuinely root-owned; staying root is correct.
+    try:
+        os.setgroups([])
+        os.setgid(st.st_gid)
+        os.setuid(st.st_uid)
+        print(f"Running as uid {st.st_uid}:{st.st_gid}, the owner of "
+              f"{config_store.ROOT}, so generated files stay yours.")
+    except OSError as exc:
+        print(f"warning: wanted to run as uid {st.st_uid} but could not ({exc}). "
+              "Saving may fail with a permission error.")
+
+
 def _lan_address():
     """This machine's address on the network it routes through, or None.
 
@@ -303,6 +349,8 @@ def _lan_address():
 
 
 def main():
+    _drop_privileges()
+
     port = 8765
     host = "127.0.0.1"
     for arg in sys.argv[1:]:
