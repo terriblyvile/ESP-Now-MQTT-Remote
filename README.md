@@ -96,6 +96,30 @@ your MAC addresses and room names out of commits:
 are optional — a clone without them builds the generic defaults, so the manual
 route below still works and `tools/check_discovery.sh` still runs.
 
+### Which machine should run this?
+
+Decide this before anything else, because it is not a preference — it follows
+from where your boards are.
+
+**The flasher must run on the machine the board is physically plugged into.**
+It reads serial ports locally. The browser is only a window onto it, so opening
+the page from your laptop does not give it your laptop's USB devices.
+
+| Where the board is plugged in | Run the flasher | Why |
+|---|---|---|
+| The computer you sit at | **Directly, with `python3`** | The board is already there. Nothing to configure. |
+| A server the hubs live in | **In Docker on that server** | Detached, survives reboots, reachable from any browser. |
+
+A remote board and a remote flasher cannot be bridged by configuration. There
+is no passing a USB device from your laptop to a container on another machine
+— USB passthrough moves a device between a host and *its own* guests, on the
+same physical computer. If the board is in your laptop and the flasher is on a
+server, the answer is to move one of them, not to configure harder.
+
+A common split works well: Docker on the server for the hubs bolted in beside
+it, and `python3 tools/flasher/app.py` on your laptop for handsets you are
+still iterating on. They are the same app.
+
 ### Running it in Docker
 
 If you would rather not install PlatformIO, the image brings its own:
@@ -152,14 +176,13 @@ the network, so that does still work from a container.
 
 #### "No serial ports found"
 
-**Ports are read on the machine running the app, not the one showing the page.**
-Opening the UI from your laptop does not let it flash a board plugged into your
-laptop — that board is invisible to the server. Either plug it into the machine
-running the flasher, or run the flasher on the machine the board is plugged
-into.
+First check you are running it on the right machine — see
+[Which machine should run this?](#which-machine-should-run-this) above. A board
+plugged into the computer you are browsing from is invisible to a flasher
+running anywhere else, and no configuration fixes that.
 
-When the board *is* attached to the right machine, each layer between it and
-the app has to pass it through. Check them from the outside in:
+When the board *is* attached to the machine running the flasher, each layer
+between it and the app has to pass it through. Check them from the outside in:
 
 ```bash
 ls -l /dev/serial/by-id/ /dev/ttyUSB* /dev/ttyACM*   # on the host
