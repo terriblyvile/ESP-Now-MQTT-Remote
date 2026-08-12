@@ -25,7 +25,7 @@ for VARIANT in wifi eth; do
   "$OUT/dump" > "$OUT/messages.tsv"
 
 python3 - "$OUT/messages.tsv" "$MQTT_BUFFER_SIZE" "$VARIANT" <<'PY'
-import json, re, sys
+import json, os, re, sys
 from collections import Counter
 
 path, buffer_size, variant = sys.argv[1], int(sys.argv[2]), sys.argv[3]
@@ -169,8 +169,19 @@ for tap, hold in holds:
         failures.append(f"hold command {hold!r} collides with a button name")
 
 # --- per-remote coverage ---------------------------------------------------
-config = open("include/config.h").read()
-platformio = open("platformio.ini").read()
+# Locations and environments can come from tracked defaults or from what
+# tools/flasher generated. Where a generated file exists it is the authority:
+# the tracked defaults are then only a fallback for a clone that has never run
+# the flasher, and holding those to a user's room list would be nonsense.
+config_sources = ["include/config.h"]
+if os.path.exists("include/device_config.h"):
+    config_sources.append("include/device_config.h")
+config = "".join(open(f).read() for f in config_sources)
+config_label = " or ".join(config_sources)
+
+env_source = ("platformio_local.ini" if os.path.exists("platformio_local.ini")
+              else "platformio.ini")
+platformio = open(env_source).read()
 
 for location, name in remotes:
     node_id = f"esp_hub_{location}"
@@ -192,13 +203,13 @@ for location, name in remotes:
                 failures.append(f"{location}: {hold!r} has subtype {hsubtype!r}, expected {tap!r}")
 
     if f'"{location}"' not in config:
-        failures.append(f"{location}: not found in include/config.h")
+        failures.append(f"{location}: not found in {config_label}")
     if f"REMOTE_LOCATION='\"{location}\"'" not in platformio:
-        failures.append(f"{location}: no matching build environment in platformio.ini")
+        failures.append(f"{location}: no matching build environment in {env_source}")
 
 for env_location in re.findall(r"REMOTE_LOCATION='\"([^\"]+)\"'", platformio):
     if env_location not in [loc for loc, _ in remotes]:
-        failures.append(f"platformio.ini builds {env_location!r}, not in REMOTE_LOCATION_TABLE")
+        failures.append(f"{env_source} builds {env_location!r}, not in REMOTE_LOCATION_TABLE")
 
 # --- uniqueness ------------------------------------------------------------
 all_commands = names + [h for _, h in holds]
@@ -227,11 +238,15 @@ else:
         if branch not in all_commands:
             failures.append(f"{example}: branch for {branch!r}, not a command")
 
-    example_topics = re.findall(r"^\s*topic:\s*(\S+)", automation, re.M)
-    valid_topics = [f"home/{loc}/remote/command" for loc, _ in remotes]
-    for topic in example_topics:
-        if topic not in valid_topics:
-            failures.append(f"{example}: triggers on {topic}, which no remote publishes to")
+    # The shipped example is pinned to the default "livingroom". Once you have
+    # generated your own rooms it becomes a template to copy per remote rather
+    # than a live contract, so only hold it to a real topic while the tracked
+    # defaults are what is being built.
+    if "include/device_config.h" not in config_sources:
+        valid_topics = [f"home/{loc}/remote/command" for loc, _ in remotes]
+        for topic in re.findall(r"^\s*topic:\s*(\S+)", automation, re.M):
+            if topic not in valid_topics:
+                failures.append(f"{example}: triggers on {topic}, which no remote publishes to")
     # A wrapper key here silently swallows the topic filter, and the automation
     # then fires on every message the broker carries.
     if re.search(r"trigger:\s*mqtt\s*\n\s*options:", automation):

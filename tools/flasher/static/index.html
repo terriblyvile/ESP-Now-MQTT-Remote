@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remote Firmware Flasher</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>Remote Firmware Flasher</h1>
+  <p>Flash a hub, read its ESP-NOW address off the boot log, then flash remotes that talk to it.</p>
+</header>
+
+<main>
+
+  <section>
+    <h2>1 &middot; Credentials</h2>
+    <p class="hint">
+      Written to <code>include/secrets.h</code>, which is gitignored. Only the
+      hubs use these &mdash; a remote never joins WiFi.
+    </p>
+    <div class="grid">
+      <div><label for="WIFI_SSID">WiFi network</label><input type="text" id="WIFI_SSID" autocomplete="off"></div>
+      <div><label for="WIFI_PASSWORD">WiFi password</label><input type="password" id="WIFI_PASSWORD" autocomplete="off"></div>
+      <div><label for="MQTT_HOST">MQTT broker host</label><input type="text" id="MQTT_HOST" placeholder="192.168.1.10" autocomplete="off"></div>
+      <div><label for="MQTT_PORT">MQTT port</label><input type="number" id="MQTT_PORT" value="1883"></div>
+      <div><label for="MQTT_USERNAME">MQTT username</label><input type="text" id="MQTT_USERNAME" autocomplete="off"></div>
+      <div><label for="MQTT_PASSWORD">MQTT password</label><input type="password" id="MQTT_PASSWORD" autocomplete="off"></div>
+      <div><label for="OTA_PASSWORD">OTA password</label><input type="password" id="OTA_PASSWORD" autocomplete="off"></div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="save-secrets">Save credentials</button>
+      <span class="status" id="secrets-status"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>2 &middot; Radio and topics</h2>
+    <p class="hint">
+      The channel is the single most common reason a remote does nothing: ESP-NOW
+      has no channel of its own, so this must match the channel your access point
+      runs on. An Ethernet hub never associates and pins the radio here instead.
+    </p>
+    <div class="grid">
+      <div><label for="wifi_channel">WiFi channel</label><input type="number" id="wifi_channel" min="1" max="13"></div>
+      <div><label for="topic_root">MQTT topic root</label><input type="text" id="topic_root"></div>
+      <div><label for="hold_threshold_ms">Hold threshold (ms)</label><input type="number" id="hold_threshold_ms" min="100" max="5000" step="50"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 &middot; Base stations</h2>
+    <p class="hint">
+      Flash a hub, then capture its address. Remotes unicast to one hub's MAC, so
+      a press reaches exactly one of them &mdash; both hubs can run at once.
+    </p>
+
+    <div class="hub" data-hub="wireless">
+      <h3>Wireless hub <span class="badge" id="badge-wireless">no address yet</span></h3>
+      <p class="sub">Plain ESP32 reaching the broker over WiFi. Build target <code>hub</code>.</p>
+      <div class="row">
+        <div>
+          <label for="hub_mac_wireless">ESP-NOW address</label>
+          <input type="text" class="mac" id="hub_mac_wireless" placeholder="not captured yet">
+        </div>
+        <div>
+          <label for="port-wireless">Serial port</label>
+          <select id="port-wireless"></select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="primary" data-flash="hub" data-port="port-wireless">Flash over USB</button>
+        <button data-capture="wireless" data-port="port-wireless">Capture address</button>
+        <button data-ota="hub_ota" data-hub="wireless">Reflash over the air</button>
+      </div>
+    </div>
+
+    <div class="hub" data-hub="wired">
+      <h3>Wired hub <span class="badge" id="badge-wired">no address yet</span></h3>
+      <p class="sub">WT32-ETH01 reaching the broker over Ethernet. Build target <code>hub_eth</code>.</p>
+      <div class="row">
+        <div>
+          <label for="hub_mac_wired">ESP-NOW address</label>
+          <input type="text" class="mac" id="hub_mac_wired" placeholder="not captured yet">
+        </div>
+        <div>
+          <label for="port-wired">Serial port</label>
+          <select id="port-wired"></select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="primary" data-flash="hub_eth" data-port="port-wired">Flash over USB</button>
+        <button data-capture="wired" data-port="port-wired" data-noreset="1">Capture address</button>
+        <button data-ota="hub_eth_ota" data-hub="wired">Reflash over the air</button>
+      </div>
+
+      <details class="guide" open>
+        <summary>This board has no USB &mdash; wiring and download mode</summary>
+        <div>
+          <ol class="steps">
+            <li>Wire a <strong>3.3V</strong> USB-to-serial adapter: <code>TX&rarr;RX0</code>, <code>RX&rarr;TX0</code>, <code>GND</code>, <code>3V3</code>.</li>
+            <li>Tie <code>GPIO 0</code> to <code>GND</code>, then power the board up. It is now in download mode.</li>
+            <li>Press <strong>Flash over USB</strong> above and wait for it to finish.</li>
+            <li>Remove the <code>GPIO 0</code> jumper and power-cycle the board so it runs the firmware.</li>
+            <li>Press <strong>Capture address</strong>, then power-cycle once more so it reprints its boot banner.</li>
+          </ol>
+          <p class="hint" style="margin:0">
+            There is no auto-reset on this board, because <code>GPIO 0</code> is also the
+            PHY clock input. That is why steps 4 and 5 are manual, and why capture
+            here listens rather than pulsing reset.
+          </p>
+        </div>
+      </details>
+    </div>
+
+    <p class="hint" id="ota-hint" style="margin-bottom:0">
+      Over-the-air uploads use the hostname the hub advertises
+      (<code>esp_hub_wifi.local</code> / <code>esp_hub_eth.local</code>) and the OTA
+      password above. A hub has to be running working firmware already.
+    </p>
+  </section>
+
+  <section>
+    <h2>4 &middot; Remotes</h2>
+    <p class="hint">
+      Each becomes a Home Assistant device and an MQTT topic branch. The location
+      is used verbatim in the topic, so it is lowercase and underscore-only, and
+      at most 15 characters.
+    </p>
+    <table>
+      <thead>
+        <tr><th style="width:26%">Location</th><th style="width:34%">Display name</th><th style="width:22%">Talks to</th><th></th></tr>
+      </thead>
+      <tbody id="remotes"></tbody>
+    </table>
+    <div class="actions">
+      <button class="small" id="add-remote">Add remote</button>
+    </div>
+    <div class="actions" style="border-top:1px solid var(--line); padding-top:14px; margin-top:16px">
+      <button class="primary" id="save-config">Save configuration</button>
+      <span class="status" id="config-status"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>5 &middot; Flash a remote</h2>
+    <p class="hint">
+      Save the configuration first &mdash; the build reads the generated files. A
+      remote must be reflashed whenever its hub's address changes.
+    </p>
+    <div class="row">
+      <div><label for="remote-target">Remote</label><select id="remote-target"></select></div>
+      <div><label for="port-remote">Serial port</label><select id="port-remote"></select></div>
+      <div class="shrink"><button class="primary" id="flash-remote">Flash over USB</button></div>
+    </div>
+  </section>
+
+</main>
+
+<div id="logpanel" class="collapsed">
+  <div id="logbar">
+    <span id="joblabel">Idle</span>
+    <span class="spacer"></span>
+    <button id="cancel" disabled>Stop</button>
+    <button id="clearlog">Clear</button>
+    <button id="toggle">Show log</button>
+  </div>
+  <pre id="log"></pre>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

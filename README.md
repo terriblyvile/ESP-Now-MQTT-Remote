@@ -15,6 +15,73 @@ Ethernet — running at the same time.
 
 ## Setup
 
+Start here. The flasher app does the whole sequence, including reading each
+hub's address off its boot log so you never transcribe a MAC by hand.
+
+```bash
+python3 tools/flasher/app.py
+```
+
+That opens `http://127.0.0.1:8765` in your browser. Its only prerequisite is
+PlatformIO on your `PATH` — pyserial, which it needs for the serial capture,
+ships with PlatformIO.
+
+### Work down the page
+
+**1 · Credentials.** WiFi network and password, MQTT broker host, port,
+username and password, and an OTA password of your choosing. **Save
+credentials.** Only the hubs use these; a remote never joins WiFi.
+
+**2 · Radio and topics.** Set **WiFi channel** to the channel your access point
+actually runs on, and lock the AP to it. This is the single most common reason
+a remote does nothing — ESP-NOW has no channel of its own. See
+[Radio channel](#radio-channel).
+
+**3 · Base stations.** For each hub you own:
+
+- Plug it in and pick its **serial port**.
+- **Flash over USB.** For the WT32-ETH01, follow the five wiring steps on its
+  card first — that board has no USB and needs `GPIO 0` tied to `GND`.
+- **Capture address.** It listens for the hub's boot banner and fills in the
+  ESP-NOW address itself. If it times out, press the board's reset button while
+  it is listening.
+
+You only need the hub you actually have. A remote can only be pointed at a hub
+whose address is known, and the app will say so rather than building firmware
+that transmits into nothing.
+
+**4 · Remotes.** One row per physical remote. The **location** becomes part of
+the MQTT topic, so it is lowercase, underscores only, 15 characters at most.
+The **display name** is what Home Assistant shows. **Talks to** picks which hub
+it unicasts to. Then **Save configuration**.
+
+**5 · Flash a remote.** Pick the remote and its port, and flash. Reflash a
+remote whenever its hub's address changes.
+
+Nothing needs adding to `configuration.yaml` — once a hub connects, Home
+Assistant discovers every device and entity. To give the buttons behaviour, see
+[Reacting to a press](#reacting-to-a-press).
+
+### What it writes
+
+Three files, all gitignored. It never edits a tracked file, which is what keeps
+your MAC addresses and room names out of commits:
+
+| File | Holds |
+|---|---|
+| `include/secrets.h` | WiFi, MQTT and OTA credentials |
+| `include/device_config.h` | hub MACs, rooms, channel, hold threshold |
+| `platformio_local.ini` | one build environment per remote |
+
+`include/config.h` picks up the second through `__has_include`, and
+`platformio.ini` pulls in the third through `extra_configs = *_local.ini`. Both
+are optional — a clone without them builds the generic defaults, so the manual
+route below still works and `tools/check_discovery.sh` still runs.
+
+---
+
+## Setup by hand
+
 **1. Credentials.**
 
 ```bash
@@ -62,7 +129,7 @@ Assistant; it does not give them behaviour. Import
 `livingroom` to your room, and fill in the empty `sequence:` blocks. See
 [Reacting to a press](#reacting-to-a-press).
 
-### Later, over the air
+## Flashing over the air
 
 ```bash
 pio run -e hub_eth_ota -t upload
@@ -71,7 +138,7 @@ pio run -e hub_eth_ota -t upload
 `tools/ota_auth.py` passes `OTA_PASSWORD` from `include/secrets.h`. Without it
 the upload fails with a misleading `Host ... Not Found`.
 
-### Check it without hardware
+## Check it without hardware
 
 ```bash
 tools/check_discovery.sh
@@ -101,6 +168,7 @@ src/remote/main.cpp         handset firmware
 src/hub/main.cpp            base station, transport-agnostic
 src/hub/network.{h,cpp}     WiFi or Ethernet, chosen at build time
 tools/check_discovery.sh    validates the whole contract on the host
+tools/flasher/              the flashing GUI -- python3 tools/flasher/app.py
 ```
 
 `include/config.h` is the single source of truth. A button added there gets a

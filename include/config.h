@@ -2,6 +2,17 @@
 
 // Shared between the remote and hub build targets. Anything both ends must
 // agree on lives here so they cannot drift out of sync.
+//
+// Values below marked overridable can be supplied by include/device_config.h,
+// which tools/flasher generates from what you enter in its UI. That file is
+// gitignored, so your own MACs and room names never end up in a commit -- the
+// defaults here stay generic. Everything works without it; the flasher is a
+// convenience, not a dependency.
+#if defined(__has_include)
+#if __has_include("device_config.h")
+#include "device_config.h"
+#endif
+#endif
 
 // ---------------------------------------------------------------------------
 // RADIO
@@ -13,7 +24,11 @@
 // channel -- so there this is only an *expectation*, and a router that moves
 // channel silently kills every button. An Ethernet hub never associates and
 // pins the radio here instead. Either way the remotes transmit on this.
+//
+// Overridable by device_config.h.
+#ifndef WIFI_CHANNEL
 #define WIFI_CHANNEL 1
+#endif
 
 // Which base station a remote transmits to. ESP-NOW unicast is addressed to one
 // MAC, so a packet reaches exactly one hub -- which is what lets a wired and a
@@ -28,11 +43,18 @@
 // work. Each hub prints the right one at boot.
 // Placeholders. Replace both with your own hubs' addresses before flashing a
 // remote -- a remote built against these transmits into nothing, and ESP-NOW
-// gives no delivery error it can act on, so it fails silently.
+// gives no delivery error it can act on, so it fails silently. tools/flasher
+// reads each hub's address off its boot log and fills these in for you.
+//
+// Overridable by device_config.h.
+#ifndef HUB_MAC_WIRED
 #define HUB_MAC_WIRED                                                          \
   { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01 } // WT32-ETH01
+#endif
+#ifndef HUB_MAC_WIRELESS
 #define HUB_MAC_WIRELESS                                                       \
   { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x02 } // ESP32
+#endif
 
 #ifndef HUB_MAC_ADDRESS
 #define HUB_MAC_ADDRESS HUB_MAC_WIRED
@@ -75,11 +97,16 @@
 //
 // Every entry becomes a Home Assistant device as soon as a hub connects,
 // whether or not that remote exists yet. Delete rows you have no hardware for.
+//
+// Overridable by device_config.h, which is how tools/flasher lets you add,
+// rename or remove remotes without touching a tracked file.
+#ifndef REMOTE_LOCATION_TABLE
 #define REMOTE_LOCATION_TABLE(X)                                               \
   /*  location,       Home Assistant name */                                   \
   X("livingroom", "Living Room Remote")                                        \
   X("office", "Office Remote")                                                 \
   X("bedroom", "Bedroom Remote")
+#endif
 
 // Which location this remote build identifies as. Set per build environment.
 #ifndef REMOTE_LOCATION
@@ -94,7 +121,10 @@
 
 #define HUB_FRIENDLY_NAME "ESP32 Base Station (" HUB_ID ")"
 
+// Overridable by device_config.h.
+#ifndef TOPIC_ROOT
 #define TOPIC_ROOT "home"
+#endif
 
 // Per-remote topics are built at runtime as home/<location>/remote/<leaf>, and
 // are deliberately independent of which hub relayed the press -- a remote is
@@ -175,7 +205,10 @@
 // ---------------------------------------------------------------------------
 
 // How long a button must be down before it counts as held rather than tapped.
+// Overridable by device_config.h.
+#ifndef HOLD_THRESHOLD_MS
 #define HOLD_THRESHOLD_MS 500
+#endif
 
 // Buttons that send a second, distinct command when held instead of tapped.
 // Keyed by tap command name, so a button's GPIO is never written down twice.

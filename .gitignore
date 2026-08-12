@@ -4,5 +4,14 @@
 # Local credentials -- see include/secrets.example.h
 include/secrets.h
 
+# Written by tools/flasher from what you enter in its UI. Holds your hub MAC
+# addresses and room names, which are yours and not the repo's.
+include/device_config.h
+platformio_local.ini
+tools/flasher/state.json
+
+__pycache__/
+*.pyc
+
 .vscode/
 .DS_Store
