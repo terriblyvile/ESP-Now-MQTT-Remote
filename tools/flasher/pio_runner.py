@@ -5,6 +5,7 @@ something the UI should make easy, and a build lock in the same project
 directory would fail confusingly anyway.
 """
 
+import glob
 import os
 import queue
 import shutil
@@ -124,27 +125,41 @@ def build_argv(environment, upload=False, upload_port=None):
 
 
 def list_ports():
-    """Serial ports, most-likely-a-board first.
+    """Serial ports on *this* machine, most-likely-a-board first.
 
-    pyserial ships with PlatformIO, so it is present whenever pio is.
+    These are the server's ports, not the browser's. Running the flasher on one
+    machine and opening it from another does not make the second machine's USB
+    devices appear.
     """
+    ports = []
+    seen = set()
+
+    def add(device, description, hwid, likely_board):
+        real = os.path.realpath(device)
+        if real in seen:
+            return
+        seen.add(real)
+        ports.append({"device": device, "description": description,
+                      "hwid": hwid, "likely_board": likely_board})
+
     try:
         from serial.tools import list_ports as _lp
+        for p in _lp.comports():
+            # Bluetooth and debug-console ttys are never boards.
+            if "Bluetooth" in p.device or p.device.endswith("debug-console"):
+                continue
+            add(p.device, p.description or "", p.hwid or "", bool(p.vid))
     except ImportError:  # pragma: no cover - depends on the host
-        return []
+        pass
 
-    ports = []
-    for p in _lp.comports():
-        # Bluetooth and debug-console ttys clutter the list and are never boards.
-        if "Bluetooth" in p.device or p.device.endswith("debug-console"):
-            continue
-        ports.append(
-            {
-                "device": p.device,
-                "description": p.description or "",
-                "hwid": p.hwid or "",
-                "likely_board": bool(p.vid),
-            }
-        )
+    # pyserial identifies ports by walking /sys, which a container usually does
+    # not have even when the device node itself was passed in with --device. In
+    # that case comports() returns nothing while /dev/ttyUSB0 is sitting right
+    # there and perfectly usable, so fall back to the nodes themselves.
+    for pattern in ("/dev/serial/by-id/*", "/dev/ttyUSB*", "/dev/ttyACM*",
+                    "/dev/cu.usb*", "/dev/cu.wchusb*", "/dev/cu.SLAB*"):
+        for device in sorted(glob.glob(pattern)):
+            add(device, "detected by device node", "", True)
+
     ports.sort(key=lambda p: (not p["likely_board"], p["device"]))
     return ports

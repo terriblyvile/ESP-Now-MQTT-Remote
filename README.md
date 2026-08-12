@@ -150,6 +150,42 @@ VM with no USB passthrough. There the UI loads and the config pages work, but
 directly with `python3` on those machines. Over-the-air hub flashing goes over
 the network, so that does still work from a container.
 
+#### "No serial ports found"
+
+**Ports are read on the machine running the app, not the one showing the page.**
+Opening the UI from your laptop does not let it flash a board plugged into your
+laptop — that board is invisible to the server. Either plug it into the machine
+running the flasher, or run the flasher on the machine the board is plugged
+into.
+
+When the board *is* attached to the right machine, each layer between it and
+the app has to pass it through. Check them from the outside in:
+
+```bash
+ls -l /dev/serial/by-id/ /dev/ttyUSB* /dev/ttyACM*   # on the host
+```
+
+**Proxmox LXC.** A container sees no USB device by default. On the *host*, add
+to `/etc/pve/lxc/<id>.conf` — `ls -l /dev/ttyUSB0` gives the major:minor to
+allow (`188` for USB serial, `166` for ACM):
+
+```
+lxc.cgroup2.devices.allow: c 188:* rwm
+lxc.cgroup2.devices.allow: c 166:* rwm
+lxc.mount.entry: /dev/ttyUSB0 dev/ttyUSB0 none bind,optional,create=file
+```
+
+Then restart the container and confirm `/dev/ttyUSB0` exists inside it. An
+unprivileged container also needs the device readable by the mapped user.
+
+**Docker.** Uncomment `devices:` in [`docker-compose.yml`](docker-compose.yml)
+with the real path, and recreate the container.
+
+**If the port still does not appear but you know it exists**, type its path
+straight into the field — it is a free-text box, not a dropdown. That covers
+the case where the device node was passed through but the container has no
+`/sys` for pyserial to enumerate it from, which is normal for `--device`.
+
 Two more things worth knowing:
 
 - **Don't alternate host and container builds** in the same checkout. Both write

@@ -165,7 +165,7 @@
           </div>
           <div>
             <label for="port-wireless">Serial port</label>
-            <select id="port-wireless"></select>
+            <input type="text" id="port-wireless" list="port-options" placeholder="/dev/ttyUSB0" autocomplete="off" spellcheck="false">
           </div>
         </div>
         <div class="actions">
@@ -185,7 +185,7 @@
           </div>
           <div>
             <label for="port-wired">Serial port</label>
-            <select id="port-wired"></select>
+            <input type="text" id="port-wired" list="port-options" placeholder="/dev/ttyUSB0" autocomplete="off" spellcheck="false">
           </div>
         </div>
         <div class="actions">
@@ -212,6 +212,8 @@
           </div>
         </details>
       </div>
+
+      <p class="hint port-hint" hidden></p>
 
       <p class="hint">
         Over-the-air uploads use the hostname the hub advertises
@@ -257,13 +259,17 @@
         Save the configuration first &mdash; the build reads the generated files.
         A remote must be reflashed whenever its hub's address changes.
       </p>
+      <p class="hint port-hint" hidden></p>
+
       <div class="row">
         <div><label for="remote-target">Remote</label><select id="remote-target"></select></div>
-        <div><label for="port-remote">Serial port</label><select id="port-remote"></select></div>
+        <div><label for="port-remote">Serial port</label><input type="text" id="port-remote" list="port-options" placeholder="/dev/ttyUSB0" autocomplete="off" spellcheck="false"></div>
         <div class="shrink"><button class="primary" id="flash-remote">Flash over USB</button></div>
       </div>
     </section>
   </div>
+
+  <datalist id="port-options"></datalist>
 
 </main>
 

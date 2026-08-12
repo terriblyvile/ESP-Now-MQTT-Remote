@@ -193,14 +193,30 @@ function follow(jobId, label, onLine) {
 // ---------------------------------------------------------------------------
 
 function renderPorts(ports) {
-  const options = ports.length
-    ? ports.map((p) => `<option value="${escapeAttr(p.device)}">${escapeAttr(p.device)}${p.description ? " — " + escapeAttr(p.description) : ""}</option>`).join("")
-    : `<option value="">no serial ports found</option>`;
+  // One datalist feeds all three pickers. They are text inputs, not selects,
+  // so a port can still be typed when nothing was discovered — which is the
+  // normal case for a container that had a device passed in but cannot see
+  // /sys to enumerate it.
+  $("port-options").innerHTML = ports
+    .map((p) => `<option value="${escapeAttr(p.device)}">${escapeAttr(p.description || "")}</option>`)
+    .join("");
+
   ["port-wireless", "port-wired", "port-remote"].forEach((id) => {
-    const sel = $(id);
-    const previous = sel.value;
-    sel.innerHTML = options;
-    if (previous) sel.value = previous;
+    const input = $(id);
+    if (!input.value && ports.length) input.value = ports[0].device;
+  });
+
+  document.querySelectorAll(".port-hint").forEach((el) => {
+    el.hidden = ports.length > 0;
+    if (!ports.length) {
+      el.innerHTML =
+        "No serial ports found <strong>on the machine running this app</strong> — "
+        + "ports are read there, not on the computer showing this page. If the "
+        + "board is plugged into a different machine, run the flasher on that one. "
+        + "In Docker, pass the device through with <code>devices:</code> in "
+        + "docker-compose.yml. You can also type a path such as "
+        + "<code>/dev/ttyUSB0</code> directly into the field above.";
+    }
   });
 }
 
