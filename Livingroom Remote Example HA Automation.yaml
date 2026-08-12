@@ -1,0 +1,121 @@
+alias: Living Room Remote - Master Handler
+description: Handles every command from the Living Room Remote, tap and hold
+triggers:
+  - trigger: mqtt
+    topic: home/livingroom/remote/command
+actions:
+  - variables:
+      button: '{{ trigger.payload }}'
+  - choose:
+      - alias: power
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''power'' }}'
+        sequence: []
+      - alias: settings
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''settings'' }}'
+        sequence: []
+      - alias: up
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''up'' }}'
+        sequence: []
+      - alias: down
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''down'' }}'
+        sequence: []
+      - alias: left
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''left'' }}'
+        sequence: []
+      - alias: right
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''right'' }}'
+        sequence: []
+      - alias: select_button
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''select_button'' }}'
+        sequence: []
+      - alias: select_button_held
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''select_button_held'' }}'
+        sequence: []
+      - alias: back
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''back'' }}'
+        sequence: []
+      - alias: home
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''home'' }}'
+        sequence: []
+      - alias: play_pause
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''play_pause'' }}'
+        sequence: []
+      - alias: volume_up
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''volume_up'' }}'
+        sequence: []
+      - alias: volume_down
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''volume_down'' }}'
+        sequence: []
+      - alias: mute
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''mute'' }}'
+        sequence: []
+      - alias: channel_up
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''channel_up'' }}'
+        sequence: []
+      - alias: channel_down
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''channel_down'' }}'
+        sequence: []
+      - alias: brightness_up
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''brightness_up'' }}'
+        sequence: []
+      - alias: brightness_down
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''brightness_down'' }}'
+        sequence: []
+      - alias: shortcut_1 - Plex
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''shortcut_1'' }}'
+        sequence: []
+      - alias: shortcut_2 - YouTube
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''shortcut_2'' }}'
+        sequence: []
+      - alias: shortcut_3
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''shortcut_3'' }}'
+        sequence: []
+      - alias: shortcut_4 - Stremio
+        conditions:
+          - condition: template
+            value_template: '{{ button == ''shortcut_4'' }}'
+        sequence: []
+mode: parallel
+max: 10

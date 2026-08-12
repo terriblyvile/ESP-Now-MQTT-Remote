@@ -1,0 +1,8 @@
+# PlatformIO build output and downloaded libraries
+.pio/
+
+# Local credentials -- see include/secrets.example.h
+include/secrets.h
+
+.vscode/
+.DS_Store
