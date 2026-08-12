@@ -36,6 +36,11 @@
     <g id="i-bolt" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
       <path d="M13 2.5 4.5 14H11l-1 7.5L19.5 10H13l1-7.5z"/>
     </g>
+    <g id="i-repo" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 9.5 5.5 13 9 16.5"/><path d="M15 9.5 18.5 13 15 16.5"/>
+      <path d="M13.2 6.5l-2.4 13"/>
+      <rect x="2.5" y="2.5" width="19" height="19" rx="3"/>
+    </g>
   </defs>
 </svg>
 
@@ -66,18 +71,18 @@
         <span class="tile-status" id="t-radio"></span>
       </button>
 
-      <button class="tile" data-go="hubs">
-        <svg viewBox="0 0 24 24"><use href="#i-hub"/></svg>
-        <h3>Base stations</h3>
-        <p>Flash a hub and capture its address</p>
-        <span class="tile-status" id="t-hubs"></span>
-      </button>
-
       <button class="tile" data-go="remotes">
         <svg viewBox="0 0 24 24"><use href="#i-remote"/></svg>
-        <h3>Remotes</h3>
+        <h3>Define Remotes</h3>
         <p>Add, name and assign each handset</p>
         <span class="tile-status" id="t-remotes"></span>
+      </button>
+
+      <button class="tile" data-go="hubs">
+        <svg viewBox="0 0 24 24"><use href="#i-hub"/></svg>
+        <h3>Flash a base station</h3>
+        <p>Upload to a hub and capture its address</p>
+        <span class="tile-status" id="t-hubs"></span>
       </button>
 
       <button class="tile" data-go="flash">
@@ -86,6 +91,14 @@
         <p>Build and upload to a handset</p>
         <span class="tile-status" id="t-flash"></span>
       </button>
+
+      <a class="tile" href="https://github.com/terriblyvile/remote-firmware"
+         target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24"><use href="#i-repo"/></svg>
+        <h3>GitHub repository</h3>
+        <p>Source, firmware and documentation</p>
+        <span class="tile-status">opens in a new tab</span>
+      </a>
     </div>
   </div>
 

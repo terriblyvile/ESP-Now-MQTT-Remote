@@ -160,6 +160,21 @@ class Handler(BaseHTTPRequestHandler):
         environment = body.get("environment")
         if not environment:
             return self._send_json({"error": "no environment given"}, status=400)
+        # Flashing a remote whose hub address is still unknown would build
+        # against the placeholder MAC and fail silently on the bench.
+        if environment.startswith("remote_"):
+            location = environment[len("remote_"):]
+            hub = config_store.missing_hub_mac(config_store.load_state(), location)
+            if hub:
+                return self._send_json(
+                    {
+                        "error": f"{location} talks to the {hub} hub, whose address "
+                        f"is not captured yet. Flash that hub and capture its "
+                        f"address first, or this remote transmits into nothing."
+                    },
+                    status=400,
+                )
+
         upload = bool(body.get("upload", True))
         argv = pio_runner.build_argv(
             environment, upload=upload, upload_port=body.get("port") or None

@@ -36,13 +36,20 @@ WiFi network and password, MQTT broker host, port, username and password, and
 an OTA password of your choosing. **Save credentials.** Only the hubs use
 these; a remote never joins WiFi.
 
-### Radio &amp; topics
+### Radio & topics
 
 Set **WiFi channel** to the channel your access point actually runs on, and
 lock the AP to it. This is the single most common reason a remote does nothing
 — ESP-NOW has no channel of its own. See [Radio channel](#radio-channel).
 
-### Base stations
+### Define Remotes
+
+One row per physical remote. The **location** becomes part of the MQTT topic,
+so it is lowercase, underscores only, 15 characters at most. The **display
+name** is what Home Assistant shows. **Talks to** picks which hub it unicasts
+to. Then **Save configuration**.
+
+### Flash a base station
 
 For each hub you own:
 
@@ -54,15 +61,9 @@ For each hub you own:
   it is listening.
 
 You only need the hub you actually have. A remote can only be pointed at a hub
-whose address is known, and the app will say so rather than building firmware
-that transmits into nothing.
-
-### Remotes
-
-One row per physical remote. The **location** becomes part of the MQTT topic,
-so it is lowercase, underscores only, 15 characters at most. The **display
-name** is what Home Assistant shows. **Talks to** picks which hub it unicasts
-to. Then **Save configuration**.
+whose address is known: you can define remotes first, but the app refuses to
+flash one whose hub has no address rather than building firmware that
+transmits into nothing.
 
 ### Flash a remote
 

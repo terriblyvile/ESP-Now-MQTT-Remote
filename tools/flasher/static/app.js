@@ -12,8 +12,8 @@ const PAGES = {
   },
   credentials: { title: "Credentials", sub: "WiFi, MQTT broker and OTA passwords." },
   radio: { title: "Radio & topics", sub: "Channel, MQTT topic root and hold threshold." },
-  hubs: { title: "Base stations", sub: "Flash a hub, then capture the address remotes transmit to." },
-  remotes: { title: "Remotes", sub: "One row per physical handset." },
+  remotes: { title: "Define Remotes", sub: "One row per physical handset." },
+  hubs: { title: "Flash a base station", sub: "Upload to a hub, then capture the address remotes transmit to." },
   flash: { title: "Flash a remote", sub: "Build a handset's firmware and upload it over USB." },
 };
 
@@ -66,7 +66,10 @@ function refreshTiles() {
 
   setTile("t-radio", `channel ${state.wifi_channel} · ${state.topic_root}/`, "ok");
 
-  const captured = ["wired", "wireless"].filter((h) => (state[`hub_mac_${h}`] || "").trim());
+  // Read the inputs, not the last saved state, so a just-captured address is
+  // reflected before you have got round to saving.
+  const macs = hubMacs();
+  const captured = ["wired", "wireless"].filter((h) => macs[h]);
   setTile("t-hubs",
     captured.length ? `${captured.join(" and ")} address captured` : "no address captured",
     captured.length ? "ok" : "missing");
@@ -74,7 +77,7 @@ function refreshTiles() {
   const n = state.remotes.length;
   setTile("t-remotes", n === 1 ? "1 remote" : `${n} remotes`, n ? "ok" : "missing");
 
-  const ready = state.remotes.filter((r) => (state[`hub_mac_${r.hub}`] || "").trim()).length;
+  const ready = state.remotes.filter((r) => macs[r.hub]).length;
   setTile("t-flash",
     ready ? `${ready} ready to flash` : "capture a hub address first",
     ready ? "ok" : "missing");
@@ -238,12 +241,29 @@ function renderRemotes() {
   renderRemoteTargets();
 }
 
+/** Live MAC values, which are the inputs rather than the last saved state. */
+function hubMacs() {
+  return {
+    wired: $("hub_mac_wired").value.trim(),
+    wireless: $("hub_mac_wireless").value.trim(),
+  };
+}
+
 function renderRemoteTargets() {
   const sel = $("remote-target");
   const previous = sel.value;
+  const macs = hubMacs();
   sel.innerHTML = state.remotes
     .filter((r) => r.location.trim())
-    .map((r) => `<option value="remote_${escapeAttr(r.location.trim())}">${escapeAttr(r.name || r.location)} — remote_${escapeAttr(r.location.trim())}</option>`)
+    .map((r) => {
+      const loc = r.location.trim();
+      // Building against an uncaptured hub gives firmware that transmits into
+      // nothing, so say why rather than letting it be picked.
+      const blocked = !macs[r.hub];
+      const label = `${r.name || loc} — remote_${loc}`
+        + (blocked ? ` (needs the ${r.hub} hub's address)` : "");
+      return `<option value="remote_${escapeAttr(loc)}"${blocked ? " disabled" : ""}>${escapeAttr(label)}</option>`;
+    })
     .join("") || `<option value="">no remotes configured</option>`;
   if (previous) sel.value = previous;
 }
@@ -323,7 +343,10 @@ $("add-remote").onclick = () => {
 };
 
 ["hub_mac_wired", "hub_mac_wireless"].forEach((id) => {
-  $(id).oninput = renderMacBadges;
+  $(id).oninput = () => {
+    renderMacBadges();
+    renderRemoteTargets();  // an address arriving unblocks its remotes
+  };
 });
 
 // flash buttons
@@ -376,8 +399,10 @@ document.querySelectorAll("button[data-capture]").forEach((btn) => {
       return;
     }
     if (captured) {
+      // Assigning .value does not fire oninput, so refresh explicitly.
       $(`hub_mac_${hub}`).value = captured;
       renderMacBadges();
+      renderRemoteTargets();
       configStatus(`captured ${captured} — save the configuration to use it`, "ok");
     }
   };

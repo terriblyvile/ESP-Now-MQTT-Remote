@@ -69,6 +69,9 @@ header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .tile {
   display: block;
   text-align: left;
+  text-decoration: none;   /* the repo tile is an anchor */
+  color: inherit;
+  font: inherit;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;

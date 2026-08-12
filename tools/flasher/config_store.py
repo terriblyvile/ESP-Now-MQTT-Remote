@@ -195,17 +195,27 @@ def validate_state(state):
         if mac and not MAC_RE.match(mac):
             raise ConfigError(f"{label} hub MAC {mac!r} is not a MAC address")
 
-    # A remote pointed at a hub whose address is unknown would build against the
-    # placeholder and transmit into nothing, with no error at runtime.
-    for remote in remotes:
-        key = f"hub_mac_{remote['hub']}"
-        if not (state.get(key) or "").strip():
-            raise ConfigError(
-                f"{remote['location']} is set to use the {remote['hub']} hub, but "
-                f"that hub's MAC is not known yet -- flash it and capture the "
-                f"address first"
-            )
+    # Deliberately not checked here: whether the hub a remote points at has a
+    # known MAC. You define remotes before flashing a hub, so demanding it at
+    # save time would block the normal order of work. It is enforced at the
+    # point it actually matters -- see missing_hub_mac().
     return True
+
+
+def missing_hub_mac(state, location):
+    """Which hub a remote needs the address of, or None if it is ready.
+
+    A remote built against the placeholder MAC transmits into nothing, and
+    ESP-NOW reports no error it could act on, so this is the one place to stop
+    it: refuse the flash rather than hand over firmware that fails silently.
+    """
+    for remote in state.get("remotes", []):
+        if remote.get("location") == location:
+            hub = remote.get("hub")
+            if not (state.get(f"hub_mac_{hub}") or "").strip():
+                return hub
+            return None
+    return None
 
 
 def _mac_to_c(mac):
