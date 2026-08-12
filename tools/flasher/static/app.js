@@ -71,7 +71,9 @@ function refreshTiles() {
   const macs = hubMacs();
   const captured = ["wired", "wireless"].filter((h) => macs[h]);
   setTile("t-hubs",
-    captured.length ? `${captured.join(" and ")} address captured` : "no address captured",
+    captured.length === 2 ? "both addresses captured"
+      : captured.length === 1 ? `${captured[0]} address captured`
+      : "no address captured",
     captured.length ? "ok" : "missing");
 
   const n = state.remotes.length;

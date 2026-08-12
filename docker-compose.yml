@@ -1,0 +1,49 @@
+# docker compose up --build   ->   http://127.0.0.1:8765
+#
+# Flashing from a container needs the host to hand over a serial port. That
+# works on Linux; Docker Desktop on macOS and Windows cannot do it at all. See
+# the README before assuming this will flash anything.
+
+services:
+  flasher:
+    build: .
+    container_name: espnow-flasher
+
+    # Bound to the host's loopback deliberately. The API writes credentials to
+    # disk and runs builds, so "8765:8765" -- which listens on every interface
+    # -- would hand that to anyone on your network.
+    ports:
+      - "127.0.0.1:8765:8765"
+
+    volumes:
+      # Your working copy. The app writes secrets.h, device_config.h and
+      # platformio_local.ini into it, and builds read your edits from it.
+      - .:/project
+      # ~500MB of ESP32 toolchain. Named so a rebuild does not refetch it.
+      - pio-cache:/pio
+
+    # Generated files are owned by you rather than root. Export UID and GID
+    # first, or compose substitutes the defaults:
+    #   export UID=$(id -u) GID=$(id -g)
+    user: "${UID:-1000}:${GID:-1000}"
+
+    # ---- serial access, Linux only -------------------------------------
+    # Uncomment and set to your board's actual device. `ls /dev/ttyUSB*` or
+    # `ls /dev/ttyACM*` with the board plugged in. It must exist at start or
+    # the container will not come up, which is why it ships commented out.
+    #
+    # devices:
+    #   - "/dev/ttyUSB0:/dev/ttyUSB0"
+    #
+    # A board that re-enumerates on reset can change device path mid-session.
+    # If that bites, mount the bus instead -- broader access, so prefer the
+    # explicit device above where you can:
+    #
+    # volumes:
+    #   - /dev:/dev
+    # group_add:
+    #   - dialout
+    # --------------------------------------------------------------------
+
+volumes:
+  pio-cache:

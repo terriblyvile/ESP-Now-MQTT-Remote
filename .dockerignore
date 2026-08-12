@@ -1,0 +1,21 @@
+# The image installs PlatformIO and nothing else -- the project is bind-mounted
+# at run time, not copied in. So the build context should be as close to empty
+# as possible; everything here would only slow the build down.
+#
+# Credentials are listed too. They are already gitignored, and they must never
+# end up baked into an image layer either.
+
+.git/
+.pio/
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+
+include/secrets.h
+include/device_config.h
+platformio_local.ini
+tools/flasher/state.json
+
+docs/
+README.md

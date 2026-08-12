@@ -237,20 +237,31 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     port = 8765
+    host = "127.0.0.1"
     for arg in sys.argv[1:]:
         if arg.startswith("--port="):
             port = int(arg.split("=", 1)[1])
+        elif arg.startswith("--host="):
+            host = arg.split("=", 1)[1]
 
     try:
         pio_runner.find_pio()
     except pio_runner.NoPlatformIO as exc:
         print(f"warning: {exc}\n")
 
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    url = f"http://127.0.0.1:{port}/"
+    loopback = host in ("127.0.0.1", "localhost", "::1")
+    server = ThreadingHTTPServer((host, port), Handler)
+    url = f"http://{'127.0.0.1' if loopback else host}:{port}/"
     print(f"ESP-NOW MQTT Remote flasher on {url}")
+    if not loopback:
+        # Only sane inside a container, where Docker publishes the port back to
+        # the host's loopback. Anywhere else this hands the network an API that
+        # writes credentials and runs builds.
+        print(f"WARNING: listening on {host}, not loopback. This API writes")
+        print("         credentials and runs builds -- publish it to 127.0.0.1")
+        print("         only, and never expose it to an untrusted network.")
     print("Ctrl-C to stop.")
-    if "--no-browser" not in sys.argv[1:]:
+    if "--no-browser" not in sys.argv[1:] and loopback:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()

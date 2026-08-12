@@ -30,6 +30,8 @@ The home page has one tile per task, each showing where you have got to —
 which credentials are set, which hub addresses are captured, how many remotes
 are ready to flash. Work through them in this order the first time.
 
+![The flasher home page](docs/screenshots/home.png)
+
 ### Credentials
 
 WiFi network and password, MQTT broker host, port, username and password, and
@@ -49,6 +51,8 @@ so it is lowercase, underscores only, 15 characters at most. The **display
 name** is what Home Assistant shows. **Talks to** picks which hub it unicasts
 to. Then **Save configuration**.
 
+![Defining remotes](docs/screenshots/remotes.png)
+
 ### Flash a base station
 
 For each hub you own:
@@ -59,6 +63,8 @@ For each hub you own:
 - **Capture address.** It listens for the hub's boot banner and fills in the
   ESP-NOW address itself. If it times out, press the board's reset button while
   it is listening.
+
+![Flashing a base station](docs/screenshots/base-stations.png)
 
 You only need the hub you actually have. A remote can only be pointed at a hub
 whose address is known: you can define remotes first, but the app refuses to
@@ -89,6 +95,44 @@ your MAC addresses and room names out of commits:
 `platformio.ini` pulls in the third through `extra_configs = *_local.ini`. Both
 are optional — a clone without them builds the generic defaults, so the manual
 route below still works and `tools/check_discovery.sh` still runs.
+
+### Running it in Docker
+
+If you would rather not install PlatformIO, the image brings its own:
+
+```bash
+docker compose up --build
+```
+
+Then open `http://127.0.0.1:8765`. The first build downloads the ESP32
+toolchain, roughly 500MB, into a named volume so later rebuilds skip it.
+
+**Read this before assuming it can flash.** A container can only reach a serial
+port if the host hands one over. Linux can, so uncomment `devices:` in
+[`docker-compose.yml`](docker-compose.yml) and point it at your board:
+
+```yaml
+devices:
+  - "/dev/ttyUSB0:/dev/ttyUSB0"
+```
+
+**Docker Desktop on macOS and Windows cannot do this at all** — it runs a Linux
+VM with no USB passthrough. There the UI loads and the config pages work, but
+**Flash over USB** and **Capture address** cannot see a board. Run the app
+directly with `python3` on those machines. Over-the-air hub flashing goes over
+the network, so that does still work from a container.
+
+Two more things worth knowing:
+
+- **Don't alternate host and container builds** in the same checkout. Both write
+  `.pio/`, with toolchain paths that only make sense inside their own
+  environment. Switching means `rm -rf .pio` first.
+- **Generated files** are written into your working copy through the bind
+  mount. `user: "${UID:-1000}:${GID:-1000}"` keeps them owned by you rather
+  than root; export `UID` and `GID` first, or edit those defaults.
+
+The compose file publishes to `127.0.0.1` on purpose. The API writes
+credentials and runs builds, so it must not be reachable from your network.
 
 ---
 
