@@ -7,7 +7,7 @@ const SECRET_FIELDS = [
 
 const PAGES = {
   home: {
-    title: "Remote Firmware Flasher",
+    title: "ESP-NOW MQTT Remote Flasher",
     sub: "Flash a hub, read its ESP-NOW address off the boot log, then flash remotes that talk to it.",
   },
   credentials: { title: "Credentials", sub: "WiFi, MQTT broker and OTA passwords." },

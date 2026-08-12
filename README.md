@@ -1,4 +1,4 @@
-# Remote Firmware
+# ESP-NOW MQTT Remote
 
 Physical remote controls that drive Home Assistant over ESP-NOW and MQTT.
 

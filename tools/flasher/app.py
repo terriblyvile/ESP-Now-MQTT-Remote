@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Flashing GUI for the remote firmware.
+"""Flashing GUI for the ESP-NOW MQTT Remote firmware.
 
     python3 tools/flasher/app.py
 
@@ -248,7 +248,7 @@ def main():
 
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}/"
-    print(f"Remote Firmware flasher on {url}")
+    print(f"ESP-NOW MQTT Remote flasher on {url}")
     print("Ctrl-C to stop.")
     if "--no-browser" not in sys.argv[1:]:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
