@@ -101,11 +101,39 @@ route below still works and `tools/check_discovery.sh` still runs.
 If you would rather not install PlatformIO, the image brings its own:
 
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
 
-Then open `http://127.0.0.1:8765`. The first build downloads the ESP32
-toolchain, roughly 500MB, into a named volume so later rebuilds skip it.
+`-d` detaches, so it keeps running once you close the terminal, and
+`restart: unless-stopped` brings it back after a reboot. The first build
+downloads the ESP32 toolchain, roughly 500MB, into a named volume so later
+rebuilds skip it.
+
+It listens on every interface, so from another machine on the network open
+`http://<server>:8765`. The container prints the address it thinks it is
+reachable on:
+
+```bash
+docker compose logs flasher
+```
+
+**Anyone who can reach that port can read your WiFi, MQTT and OTA passwords** —
+the UI prefills them, so the API hands them out — and can start builds. Set a
+password:
+
+```bash
+FLASHER_PASSWORD='choose-something' docker compose up -d
+```
+
+The browser then asks for it, with username `flasher` (override with
+`FLASHER_USERNAME`). It is Basic auth over plain HTTP: enough to keep other
+people on your network out, not encrypted, so put it behind a TLS reverse proxy
+on a network you do not trust. To go back to server-only access instead, set
+the port mapping in [`docker-compose.yml`](docker-compose.yml) to
+`"127.0.0.1:8765:8765"`.
+
+Running it directly with `python3` still binds loopback only and needs no
+password; none of the above applies unless you pass `--host`.
 
 **Read this before assuming it can flash.** A container can only reach a serial
 port if the host hands one over. Linux can, so uncomment `devices:` in

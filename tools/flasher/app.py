@@ -7,12 +7,20 @@ Serves a page on localhost that walks through: enter credentials -> flash a hub
 -> read its ESP-NOW address off the boot log -> configure remotes -> flash them
 against that address.
 
-Bound to 127.0.0.1 on purpose. The API writes credentials to disk and runs
-builds, so it must not be reachable from the network.
+Binds 127.0.0.1 by default. The API returns the stored WiFi, MQTT and OTA
+passwords so the form can prefill, and runs builds, so it is only open to this
+machine unless you say otherwise.
+
+--host=0.0.0.0 makes it reachable from elsewhere, which is what the container
+does so Docker can publish it. Set FLASHER_PASSWORD when you do that: without
+it, anyone who can reach the port can read those credentials.
 """
 
+import base64
+import hmac
 import json
 import mimetypes
+import os
 import sys
 import threading
 import webbrowser
@@ -27,6 +35,17 @@ import pio_runner  # noqa: E402
 import serial_mac  # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
+
+# Optional gate for when the UI is reachable from more than this machine.
+# GET /api/state hands back the WiFi, MQTT and OTA passwords so the form can
+# prefill, and /api/flash runs builds, so on a shared network that is worth a
+# lock. Unset means no authentication, which is right for a loopback-only run.
+#
+# Basic auth over plain HTTP stops casual access from other machines. It does
+# not stop anyone who can watch the traffic -- the credentials are base64, not
+# encrypted. Put it behind a reverse proxy with TLS if that matters.
+PASSWORD = os.environ.get("FLASHER_PASSWORD", "")
+USERNAME = os.environ.get("FLASHER_USERNAME", "flasher")
 
 _jobs = {}
 _job_seq = 0
@@ -72,6 +91,31 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _authorized(self):
+        """True when no password is configured, or the request carries it."""
+        if not PASSWORD:
+            return True
+        header = self.headers.get("Authorization", "")
+        if header.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(header[6:]).decode("utf-8")
+                user, _, password = decoded.partition(":")
+            except (ValueError, UnicodeDecodeError):
+                return False
+            # compare_digest on both halves, so neither answer leaks by timing.
+            return (hmac.compare_digest(user, USERNAME)
+                    and hmac.compare_digest(password, PASSWORD))
+        return False
+
+    def _challenge(self):
+        body = b"Authentication required.\n"
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="ESP-NOW MQTT Remote Flasher"')
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _read_json(self):
         length = int(self.headers.get("Content-Length") or 0)
         if not length:
@@ -95,6 +139,8 @@ class Handler(BaseHTTPRequestHandler):
     # -- routes ------------------------------------------------------------
 
     def do_GET(self):
+        if not self._authorized():
+            return self._challenge()
         route = urlparse(self.path).path
         if route == "/":
             return self._send_static("index.html")
@@ -120,6 +166,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
+        if not self._authorized():
+            return self._challenge()
         route = urlparse(self.path).path
         try:
             body = self._read_json()
@@ -235,6 +283,25 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
 
+def _lan_address():
+    """This machine's address on the network it routes through, or None.
+
+    Opening a UDP socket sends nothing; it just asks the routing table which
+    local address would be used to reach that destination. Inside a container
+    this returns the container's own address, which is not what you type into a
+    browser -- Docker publishes the port on the host instead.
+    """
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(0.2)
+            s.connect(("192.0.2.1", 9))  # TEST-NET-1, guaranteed unrouted
+            return s.getsockname()[0]
+    except OSError:
+        return None
+
+
 def main():
     port = 8765
     host = "127.0.0.1"
@@ -253,14 +320,23 @@ def main():
     server = ThreadingHTTPServer((host, port), Handler)
     url = f"http://{'127.0.0.1' if loopback else host}:{port}/"
     print(f"ESP-NOW MQTT Remote flasher on {url}")
-    if not loopback:
-        # Only sane inside a container, where Docker publishes the port back to
-        # the host's loopback. Anywhere else this hands the network an API that
-        # writes credentials and runs builds.
-        print(f"WARNING: listening on {host}, not loopback. This API writes")
-        print("         credentials and runs builds -- publish it to 127.0.0.1")
-        print("         only, and never expose it to an untrusted network.")
-    print("Ctrl-C to stop.")
+    if host == "0.0.0.0":
+        # "http://0.0.0.0:8765" is not something you can type into a browser on
+        # another machine, so show an address that actually resolves there.
+        lan = _lan_address()
+        if lan:
+            print(f"Reachable on this network at http://{lan}:{port}/")
+    if PASSWORD:
+        print(f"Password required, username '{USERNAME}'.")
+    elif not loopback:
+        # Reachable from other machines with nothing in the way of the stored
+        # credentials. Worth saying out loud rather than burying in a doc.
+        print(f"WARNING: listening on {host} with no password. Anyone who can")
+        print("         reach this port can read your WiFi, MQTT and OTA")
+        print("         passwords and start builds. Set FLASHER_PASSWORD.")
+    # Flushed explicitly: with output redirected to a file, as on a server,
+    # Python block-buffers stdout and the warning above would sit unseen.
+    print("Ctrl-C to stop.", flush=True)
     if "--no-browser" not in sys.argv[1:] and loopback:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:

@@ -1,4 +1,7 @@
-# docker compose up --build   ->   http://127.0.0.1:8765
+# docker compose up -d --build   ->   http://<this-machine>:8765
+#
+# -d detaches, so it keeps running once you close the terminal, and
+# `restart: unless-stopped` brings it back after a reboot.
 #
 # Flashing from a container needs the host to hand over a serial port. That
 # works on Linux; Docker Desktop on macOS and Windows cannot do it at all. See
@@ -9,11 +12,34 @@ services:
     build: .
     container_name: espnow-flasher
 
-    # Bound to the host's loopback deliberately. The API writes credentials to
-    # disk and runs builds, so "8765:8765" -- which listens on every interface
-    # -- would hand that to anyone on your network.
+    # Reachable from other machines on your network, which is the point of
+    # running it on a server. Change to "127.0.0.1:8765:8765" to restrict it to
+    # the server itself.
+    #
+    # Anyone who can reach this port can read the stored WiFi, MQTT and OTA
+    # passwords -- the UI prefills them, so the API returns them -- and can
+    # start builds. Set FLASHER_PASSWORD below unless the network is one you
+    # fully trust.
     ports:
-      - "127.0.0.1:8765:8765"
+      - "8765:8765"
+
+    # Survives closing the terminal, a Docker daemon restart, and a reboot.
+    # Start it detached so it does not hold the terminal in the first place:
+    #   docker compose up -d --build
+    restart: unless-stopped
+
+    environment:
+      # Uncomment to require a login. Username defaults to "flasher"; override
+      # with FLASHER_USERNAME. Basic auth over plain HTTP keeps other people on
+      # the network out, but is not encrypted -- put it behind a TLS reverse
+      # proxy if the network is hostile.
+      # FLASHER_PASSWORD: "choose-something"
+      # FLASHER_USERNAME: "flasher"
+      #
+      # Passed through from your shell if set, so you can keep it out of this
+      # file entirely: FLASHER_PASSWORD=... docker compose up -d
+      FLASHER_PASSWORD: "${FLASHER_PASSWORD:-}"
+      FLASHER_USERNAME: "${FLASHER_USERNAME:-flasher}"
 
     volumes:
       # Your working copy. The app writes secrets.h, device_config.h and
