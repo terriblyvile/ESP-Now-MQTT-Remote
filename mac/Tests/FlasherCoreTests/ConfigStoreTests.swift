@@ -1,0 +1,319 @@
+import Foundation
+import Testing
+
+@testable import FlasherCore
+
+/// A throwaway project directory, so nothing here can touch a real checkout.
+///
+/// Laid out like a real checkout, so a test writing a fixture directly does not
+/// have to know which subdirectories the store would have created for itself.
+private func makeStore() throws -> ConfigStore {
+    let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("flasher-tests-\(UUID().uuidString)")
+    for subdirectory in ["include", "tools/flasher"] {
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent(subdirectory), withIntermediateDirectories: true
+        )
+    }
+    return ConfigStore(root: root)
+}
+
+/// Placeholder addresses only. Real hub MACs are the user's, and belong in the
+/// gitignored state file rather than in a test fixture.
+private let wiredMac = "AA:BB:CC:DD:EE:01"
+private let wirelessMac = "AA:BB:CC:DD:EE:02"
+
+private func sampleState() -> FlasherState {
+    var state = FlasherState()
+    state.wifiChannel = 6
+    state.topicRoot = "home"
+    state.holdThresholdMs = 500
+    state.hubMacWired = wiredMac
+    state.hubMacWireless = wirelessMac
+    state.remotes = [
+        Remote(location: "livingroom", name: "Living Room Remote", hub: .wireless),
+        Remote(location: "office", name: "Office Remote", hub: .wired),
+    ]
+    return state
+}
+
+// MARK: - generated files
+
+@Test func deviceConfigMatchesTheFirmwaresExpectations() throws {
+    let store = try makeStore()
+    let text = store.deviceConfigText(sampleState())
+
+    #expect(text.hasPrefix("#pragma once\n"))
+    #expect(text.contains("#define WIFI_CHANNEL 6\n"))
+    #expect(text.contains("#define HOLD_THRESHOLD_MS 500\n"))
+    #expect(text.contains("#define TOPIC_ROOT \"home\"\n"))
+    #expect(text.contains(
+        "#define HUB_MAC_WIRED { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01 } "
+        + "// WT32-ETH01, AA:BB:CC:DD:EE:01\n"
+    ))
+    #expect(text.contains(
+        "#define HUB_MAC_WIRELESS { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x02 } "
+        + "// ESP32, AA:BB:CC:DD:EE:02\n"
+    ))
+    // Every row but the last carries the line continuation.
+    #expect(text.contains(
+        "#define REMOTE_LOCATION_TABLE(X) \\\n"
+        + "  X(\"livingroom\", \"Living Room Remote\") \\\n"
+        + "  X(\"office\", \"Office Remote\")\n"
+    ))
+    #expect(text.hasSuffix("\n"))
+}
+
+@Test func uncapturedHubIsLeftOutSoTheDefaultStands() throws {
+    let store = try makeStore()
+    var state = sampleState()
+    state.hubMacWireless = ""
+
+    let text = store.deviceConfigText(state)
+    #expect(text.contains("#define HUB_MAC_WIRED"))
+    // Defining it as anything would beat the placeholder in config.h and hide
+    // the fact that no address has been captured.
+    #expect(!text.contains("#define HUB_MAC_WIRELESS"))
+}
+
+@Test func localIniGivesEveryRemoteItsOwnEnvironment() throws {
+    let store = try makeStore()
+    let text = store.localIniText(sampleState())
+
+    #expect(text.contains(
+        "default_envs = remote_livingroom, remote_office, hub, hub_eth\n"
+    ))
+    #expect(text.contains(
+        "[env:remote_livingroom]\n"
+        + "extends = remote_base\n"
+        + "build_flags = ${env.build_flags} -DREMOTE_LOCATION='\"livingroom\"' "
+        + "-DHUB_MAC_ADDRESS=HUB_MAC_WIRELESS\n"
+    ))
+    #expect(text.contains("-DHUB_MAC_ADDRESS=HUB_MAC_WIRED"))
+}
+
+@Test func secretsRoundTripThroughTheGeneratedHeader() throws {
+    let store = try makeStore()
+    var secrets = Secrets()
+    secrets.wifiSSID = "Some Network"
+    secrets.wifiPassword = "a \"quoted\" pass\\word"
+    secrets.mqttHost = "192.0.2.10"
+    secrets.mqttPort = "1884"
+    secrets.mqttUsername = "mqtt"
+    secrets.mqttPassword = "secret"
+    secrets.otaPassword = "ota"
+
+    try store.writeSecrets(secrets)
+    let text = try String(contentsOf: store.secretsURL, encoding: .utf8)
+    #expect(text.contains("#define WIFI_PASSWORD \"a \\\"quoted\\\" pass\\\\word\""))
+    #expect(text.contains("#define MQTT_PORT 1884"))
+
+    // Quotes and backslashes survive the round trip only if the parser undoes
+    // exactly what the writer did.
+    let reloaded = try store.loadSecrets()
+    #expect(reloaded.wifiSSID == "Some Network")
+    #expect(reloaded.mqttPort == "1884")
+    #expect(reloaded.mqttHost == "192.0.2.10")
+}
+
+@Test func secretsRefuseToBeWrittenWithoutTheEssentials() throws {
+    let store = try makeStore()
+    var secrets = Secrets()
+    secrets.mqttHost = "192.0.2.10"
+    #expect(throws: ConfigError.self) { try store.writeSecrets(secrets) }
+
+    secrets.wifiSSID = "Some Network"
+    secrets.mqttPort = "not-a-number"
+    #expect(throws: ConfigError.self) { try store.writeSecrets(secrets) }
+}
+
+@Test func headerWrittenByThePythonFlasherIsStillReadable() throws {
+    let store = try makeStore()
+    try """
+    #pragma once
+
+    // Generated by tools/flasher. Edits here are overwritten.
+
+    #define WIFI_SSID "Legacy Network"
+    #define MQTT_HOST "broker.example"
+    #define MQTT_PORT 1883
+    """.write(to: store.secretsURL, atomically: true, encoding: .utf8)
+
+    let secrets = try store.loadSecrets()
+    #expect(secrets.wifiSSID == "Legacy Network")
+    #expect(secrets.mqttHost == "broker.example")
+    #expect(secrets.mqttPort == "1883")
+    // Absent from the file, so the default stands rather than becoming "nil".
+    #expect(secrets.otaPassword == "")
+}
+
+// MARK: - validation
+
+@Test func validationAcceptsAWorkingConfiguration() throws {
+    let store = try makeStore()
+    #expect(throws: Never.self) { try store.validate(sampleState()) }
+}
+
+@Test(arguments: [
+    "Livingroom",     // uppercase reaches the topic verbatim
+    "living-room",    // hyphen is not in the allowed set
+    "1st_floor",      // must start with a letter
+    "",               // empty
+    "averyverylongroomname",  // longer than the packet's location field
+])
+func validationRejectsUnusableLocations(_ location: String) throws {
+    let store = try makeStore()
+    var state = sampleState()
+    state.remotes = [Remote(location: location, name: "Somewhere", hub: .wired)]
+    #expect(throws: ConfigError.self) { try store.validate(state) }
+}
+
+@Test(arguments: ["wifi", "eth"])
+func validationRejectsLocationsThatCollideWithAHubID(_ location: String) throws {
+    let store = try makeStore()
+    var state = sampleState()
+    state.remotes = [Remote(location: location, name: "Somewhere", hub: .wired)]
+    #expect(throws: ConfigError.self) { try store.validate(state) }
+}
+
+@Test func validationRejectsDuplicateLocations() throws {
+    let store = try makeStore()
+    var state = sampleState()
+    state.remotes = [
+        Remote(location: "office", name: "One", hub: .wired),
+        Remote(location: "office", name: "Two", hub: .wireless),
+    ]
+    #expect(throws: ConfigError.self) { try store.validate(state) }
+}
+
+@Test func validationRejectsOutOfRangeRadioSettings() throws {
+    let store = try makeStore()
+
+    var channel = sampleState()
+    channel.wifiChannel = 14
+    #expect(throws: ConfigError.self) { try store.validate(channel) }
+
+    var hold = sampleState()
+    hold.holdThresholdMs = 50
+    #expect(throws: ConfigError.self) { try store.validate(hold) }
+
+    // MQTT wildcards in a topic root would subscribe the hub to far more than
+    // its own branch.
+    for root in ["", "home/+", "home/#"] {
+        var topic = sampleState()
+        topic.topicRoot = root
+        #expect(throws: ConfigError.self) { try store.validate(topic) }
+    }
+}
+
+@Test func validationRejectsAMalformedMacButAllowsNoneAtAll() throws {
+    let store = try makeStore()
+
+    var bad = sampleState()
+    bad.hubMacWired = "AA:BB:CC:DD:EE"
+    #expect(throws: ConfigError.self) { try store.validate(bad) }
+
+    // Empty is how a hub that has not been captured yet is represented, and
+    // must stay savable -- remotes are defined before any hub is flashed.
+    var empty = sampleState()
+    empty.hubMacWired = ""
+    empty.hubMacWireless = ""
+    #expect(throws: Never.self) { try store.validate(empty) }
+}
+
+@Test func aRemoteIsBlockedOnlyUntilItsOwnHubIsKnown() {
+    var state = sampleState()
+    state.hubMacWireless = ""
+
+    // livingroom talks to the wireless hub, office to the wired one.
+    #expect(state.missingHubMac(forLocation: "livingroom") == .wireless)
+    #expect(state.missingHubMac(forLocation: "office") == nil)
+    #expect(state.missingHubMac(forLocation: "nowhere") == nil)
+}
+
+// MARK: - state.json
+
+@Test func stateSurvivesARoundTripInThePythonFlashersFormat() throws {
+    let store = try makeStore()
+    try store.saveState(sampleState())
+
+    let raw = try String(contentsOf: store.stateURL, encoding: .utf8)
+    // The Python flasher reads these exact keys.
+    #expect(raw.contains("\"wifi_channel\""))
+    #expect(raw.contains("\"hold_threshold_ms\""))
+    #expect(raw.contains("\"hub_mac_wired\""))
+    // The row identity is local to this app and must not leak into the file.
+    #expect(!raw.contains("\"id\""))
+    #expect(raw.hasSuffix("\n"))
+
+    #expect(try store.loadState() == sampleState())
+}
+
+@Test func aStateFileMissingKeysFallsBackToDefaults() throws {
+    let store = try makeStore()
+    try #"{"topic_root": "attic"}"#
+        .write(to: store.stateURL, atomically: true, encoding: .utf8)
+
+    let state = try store.loadState()
+    #expect(state.topicRoot == "attic")
+    #expect(state.wifiChannel == 1)
+    #expect(state.holdThresholdMs == 500)
+    #expect(state.remotes.isEmpty)
+}
+
+@Test func corruptStateDoesNotLockYouOut() throws {
+    let store = try makeStore()
+    try "{ not json".write(to: store.stateURL, atomically: true, encoding: .utf8)
+    #expect(try store.loadState() == FlasherState())
+}
+
+@Test func applyWritesEverythingAtOnce() throws {
+    let store = try makeStore()
+    try FileManager.default.createDirectory(
+        at: store.root.appendingPathComponent("include"), withIntermediateDirectories: true
+    )
+    try store.apply(sampleState())
+
+    let fm = FileManager.default
+    #expect(fm.fileExists(atPath: store.deviceConfigURL.path))
+    #expect(fm.fileExists(atPath: store.localIniURL.path))
+    #expect(fm.fileExists(atPath: store.stateURL.path))
+}
+
+// MARK: - odds and ends
+
+@Test func macsBecomeCInitialisers() {
+    #expect(ConfigStore.macToC("aa:bb:cc:dd:ee:01")
+            == "{ 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01 }")
+    // Hyphen-separated is accepted by the validator, so it must convert too.
+    #expect(ConfigStore.macToC("AA-BB-CC-DD-EE-02")
+            == "{ 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x02 }")
+}
+
+@Test func projectDetectionNeedsBothMarkerFiles() throws {
+    let fm = FileManager.default
+    let root = URL(fileURLWithPath: NSTemporaryDirectory())
+        .appendingPathComponent("project-\(UUID().uuidString)")
+    try fm.createDirectory(at: root.appendingPathComponent("include"),
+                           withIntermediateDirectories: true)
+
+    #expect(!ProjectRoot.isProject(root))
+    try "".write(to: root.appendingPathComponent("platformio.ini"),
+                 atomically: true, encoding: .utf8)
+    #expect(!ProjectRoot.isProject(root))
+    try "".write(to: root.appendingPathComponent("include/config.h"),
+                 atomically: true, encoding: .utf8)
+    #expect(ProjectRoot.isProject(root))
+}
+
+@Test func theTwoPortsEveryMacHasAreNotOfferedAsBoards() {
+    let noise = [
+        SerialPort(device: "/dev/cu.Bluetooth-Incoming-Port", name: "", likelyBoard: false),
+        SerialPort(device: "/dev/cu.debug-console", name: "", likelyBoard: false),
+        SerialPort(device: "/dev/cu.wlan-debug", name: "", likelyBoard: false),
+    ]
+    #expect(noise.allSatisfy { !SerialPorts.isPlausibleBoard($0) })
+
+    let board = SerialPort(device: "/dev/cu.usbserial-0001", name: "CP2102", likelyBoard: true)
+    #expect(SerialPorts.isPlausibleBoard(board))
+}
