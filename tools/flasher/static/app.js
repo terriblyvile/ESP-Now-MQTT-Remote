@@ -192,18 +192,26 @@ function follow(jobId, label, onLine) {
 // rendering
 // ---------------------------------------------------------------------------
 
-function renderPorts(ports) {
-  // One datalist feeds all three pickers. They are text inputs, not selects,
-  // so a port can still be typed when nothing was discovered — which is the
-  // normal case for a container that had a device passed in but cannot see
-  // /sys to enumerate it.
-  $("port-options").innerHTML = ports
-    .map((p) => `<option value="${escapeAttr(p.device)}">${escapeAttr(p.description || "")}</option>`)
-    .join("");
+const PORT_PICKERS = ["port-wireless", "port-wired", "port-remote"];
 
-  ["port-wireless", "port-wired", "port-remote"].forEach((id) => {
-    const input = $(id);
-    if (!input.value && ports.length) input.value = ports[0].device;
+/** The chosen port, from whichever of the two inputs is currently in use. */
+function portValue(id) {
+  const manual = $(`${id}-manual`);
+  return (manual && !manual.hidden ? manual.value : $(id).value).trim();
+}
+
+function renderPorts(ports) {
+  const options = ports.length
+    ? ports.map((p) => `<option value="${escapeAttr(p.device)}">${escapeAttr(p.device)}${p.description ? " — " + escapeAttr(p.description) : ""}</option>`).join("")
+    : `<option value="">no serial ports found</option>`;
+
+  PORT_PICKERS.forEach((id) => {
+    const sel = $(id);
+    const previous = sel.value;
+    sel.innerHTML = options;
+    // Keep the selection across the four-second refresh, or the list would
+    // reset itself under you while you were reaching for the flash button.
+    if (previous && ports.some((p) => p.device === previous)) sel.value = previous;
   });
 
   document.querySelectorAll(".port-hint").forEach((el) => {
@@ -214,8 +222,8 @@ function renderPorts(ports) {
         + "ports are read there, not on the computer showing this page. If the "
         + "board is plugged into a different machine, run the flasher on that one. "
         + "In Docker, pass the device through with <code>devices:</code> in "
-        + "docker-compose.yml. You can also type a path such as "
-        + "<code>/dev/ttyUSB0</code> directly into the field above.";
+        + "docker-compose.yml. If you know the path but it is not being "
+        + "enumerated, <strong>Type a path</strong> lets you enter it directly.";
     }
   });
 }
@@ -360,6 +368,28 @@ $("add-remote").onclick = () => {
   renderRemotes();
 };
 
+// Detection is the default; typing a path is the escape hatch for a port the
+// host has but cannot enumerate — a device passed into a container without
+// /sys, most often.
+document.querySelectorAll("[data-port-toggle]").forEach((btn) => {
+  btn.onclick = () => {
+    const id = btn.dataset.portToggle;
+    const sel = $(id);
+    const manual = $(`${id}-manual`);
+    const goingManual = manual.hidden;
+
+    manual.hidden = !goingManual;
+    sel.hidden = goingManual;
+    btn.textContent = goingManual ? "Pick detected" : "Type a path";
+
+    if (goingManual) {
+      // Carry the current choice over so it can be edited rather than retyped.
+      if (!manual.value && sel.value) manual.value = sel.value;
+      manual.focus();
+    }
+  };
+});
+
 ["hub_mac_wired", "hub_mac_wireless"].forEach((id) => {
   $(id).oninput = () => {
     renderMacBadges();
@@ -370,7 +400,7 @@ $("add-remote").onclick = () => {
 // flash buttons
 document.querySelectorAll("button[data-flash]").forEach((btn) => {
   btn.onclick = async () => {
-    const port = $(btn.dataset.port).value;
+    const port = portValue(btn.dataset.port);
     if (!port) { openLog(); append("[flasher] no serial port selected"); return; }
     try {
       const { job } = await api("/api/flash", { environment: btn.dataset.flash, port });
@@ -402,7 +432,7 @@ document.querySelectorAll("button[data-ota]").forEach((btn) => {
 document.querySelectorAll("button[data-capture]").forEach((btn) => {
   btn.onclick = async () => {
     const hub = btn.dataset.capture;
-    const port = $(btn.dataset.port).value;
+    const port = portValue(btn.dataset.port);
     if (!port) { openLog(); append("[flasher] no serial port selected"); return; }
     const reset = btn.dataset.noreset !== "1";
     let captured = null;
@@ -428,7 +458,7 @@ document.querySelectorAll("button[data-capture]").forEach((btn) => {
 
 $("flash-remote").onclick = async () => {
   const environment = $("remote-target").value;
-  const port = $("port-remote").value;
+  const port = portValue("port-remote");
   if (!environment) { openLog(); append("[flasher] no remote configured"); return; }
   if (!port) { openLog(); append("[flasher] no serial port selected"); return; }
   try {

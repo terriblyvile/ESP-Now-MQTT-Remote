@@ -165,7 +165,12 @@
           </div>
           <div>
             <label for="port-wireless">Serial port</label>
-            <input type="text" id="port-wireless" list="port-options" placeholder="/dev/ttyUSB0" autocomplete="off" spellcheck="false">
+            <div class="port-picker">
+              <select id="port-wireless"></select>
+              <input type="text" id="port-wireless-manual" hidden
+                     placeholder="/dev/ttyUSB0" autocomplete="off" spellcheck="false">
+              <button type="button" class="small port-toggle" data-port-toggle="port-wireless">Type a path</button>
+            </div>
           </div>
         </div>
         <div class="actions">
@@ -185,7 +190,12 @@
           </div>
           <div>
             <label for="port-wired">Serial port</label>
-            <input type="text" id="port-wired" list="port-options" placeholder="/dev/ttyUSB0" autocomplete="off" spellcheck="false">
+            <div class="port-picker">
+              <select id="port-wired"></select>
+              <input type="text" id="port-wired-manual" hidden
+                     placeholder="/dev/ttyUSB0" autocomplete="off" spellcheck="false">
+              <button type="button" class="small port-toggle" data-port-toggle="port-wired">Type a path</button>
+            </div>
           </div>
         </div>
         <div class="actions">
@@ -263,13 +273,20 @@
 
       <div class="row">
         <div><label for="remote-target">Remote</label><select id="remote-target"></select></div>
-        <div><label for="port-remote">Serial port</label><input type="text" id="port-remote" list="port-options" placeholder="/dev/ttyUSB0" autocomplete="off" spellcheck="false"></div>
+        <div>
+          <label for="port-remote">Serial port</label>
+          <div class="port-picker">
+            <select id="port-remote"></select>
+            <input type="text" id="port-remote-manual" hidden
+                   placeholder="/dev/ttyUSB0" autocomplete="off" spellcheck="false">
+            <button type="button" class="small port-toggle" data-port-toggle="port-remote">Type a path</button>
+          </div>
+        </div>
         <div class="shrink"><button class="primary" id="flash-remote">Flash over USB</button></div>
       </div>
     </section>
   </div>
 
-  <datalist id="port-options"></datalist>
 
 </main>
 

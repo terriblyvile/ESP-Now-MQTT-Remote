@@ -189,6 +189,13 @@ button.primary {
 button.danger { color: var(--bad); }
 button.small { padding: 4px 9px; font-size: 13px; }
 
+/* Detected dropdown, plus an opt-in text field for a port the host has but
+   cannot enumerate. Only one of the two is ever visible. */
+.port-picker { display: flex; gap: 8px; align-items: center; }
+.port-picker select,
+.port-picker input[type=text] { flex: 1 1 auto; min-width: 0; }
+.port-picker .port-toggle { flex: 0 0 auto; white-space: nowrap; }
+
 .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .row > * { flex: 1 1 160px; }
 .row > .shrink { flex: 0 0 auto; }
