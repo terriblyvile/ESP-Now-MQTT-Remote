@@ -21,8 +21,39 @@ Ethernet — running at the same time.
 
 ## Setup
 
-Start here. The flasher app does the whole sequence, including reading each
-hub's address off its boot log so you never transcribe a MAC by hand.
+Start here. The flasher does the whole sequence, including reading each hub's
+address off its boot log so you never transcribe a MAC by hand.
+
+It comes two ways, and they are interchangeable: the same steps, the same
+generated files, either one on the same checkout on alternate days. Pick the
+Mac app if you are on a Mac with the boards plugged into it; pick the browser
+tool if you are not, or if the boards live on another machine.
+
+### The Mac app
+
+A native app with no Python of its own — [`mac/`](mac/):
+
+```bash
+cd mac && ./build-app.sh --open
+```
+
+That builds `mac/build/ESP-NOW Remote Flasher.app`. Move it to `/Applications`
+once and launch it from Spotlight thereafter. Building it needs Xcode's command
+line tools; flashing still needs PlatformIO.
+
+On first launch it asks for your firmware checkout — the folder holding
+`platformio.ini` — and remembers it. Quit it the way you quit anything else,
+with ⌘Q.
+
+An app launched from Finder inherits almost no `PATH`, so it looks for
+PlatformIO in the places it actually installs — its own virtualenv, Homebrew,
+pipx, a framework Python — and asks your login shell as a fallback. If it still
+guesses wrong, set the path under **Settings ▸ PlatformIO**.
+
+### The browser tool
+
+Runs anywhere Python does, which is the point: put it on the machine the boards
+are plugged into, and open it from wherever you are sitting.
 
 ```bash
 python3 tools/flasher/app.py
@@ -38,9 +69,13 @@ That opens `http://127.0.0.1:8765` in your browser. Its only prerequisite is
 PlatformIO on your `PATH` — pyserial, which it needs for the serial capture,
 ships with PlatformIO.
 
-The home page has one tile per task, each showing where you have got to —
+### Working through it
+
+Both tools present the same six tasks, each showing where you have got to —
 which credentials are set, which hub addresses are captured, how many remotes
-are ready to flash. Work through them in this order the first time.
+are ready to flash. Work through them in this order the first time. The
+screenshots below are the browser tool; the app puts the same tasks in a
+sidebar.
 
 ![The flasher home page](docs/screenshots/home.png)
 
@@ -108,6 +143,10 @@ your MAC addresses and room names out of commits:
 are optional — a clone without them builds the generic defaults, so the manual
 route below still works and `tools/check_discovery.sh` still runs.
 
+The Mac app and the browser tool write these identically, down to the byte, and
+each reads what the other wrote. Switching between them costs nothing and
+neither will stand on the other's work.
+
 ### Which machine should run this?
 
 Decide this before anything else, because it is not a preference — it follows
@@ -119,7 +158,8 @@ the page from your laptop does not give it your laptop's USB devices.
 
 | Where the board is plugged in | Run the flasher | Why |
 |---|---|---|
-| The computer you sit at | **Directly, with `python3`** | The board is already there. Nothing to configure. |
+| The Mac you sit at | **The Mac app** | The board is already there, and it reads the ports natively. |
+| Another computer you sit at | **Directly, with `python3`** | Same reason; the browser tool runs anywhere Python does. |
 | A server the hubs live in | **In Docker on that server** | Detached, survives reboots, reachable from any browser. |
 
 A remote board and a remote flasher cannot be bridged by configuration. There
@@ -129,8 +169,8 @@ same physical computer. If the board is in your laptop and the flasher is on a
 server, the answer is to move one of them, not to configure harder.
 
 A common split works well: Docker on the server for the hubs bolted in beside
-it, and `python3 tools/flasher/app.py` on your laptop for handsets you are
-still iterating on. They are the same app.
+it, and the Mac app on your laptop for handsets you are still iterating on.
+They generate the same files, so the two halves stay in step.
 
 ### Running it in Docker
 

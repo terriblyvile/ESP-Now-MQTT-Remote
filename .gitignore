@@ -13,5 +13,10 @@ tools/flasher/state.json
 __pycache__/
 *.pyc
 
+# Mac app: Swift package build output and the assembled .app bundle
+mac/.build/
+mac/build/
+.swiftpm/
+
 .vscode/
 .DS_Store
