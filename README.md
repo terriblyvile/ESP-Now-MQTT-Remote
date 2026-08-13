@@ -1,5 +1,11 @@
 # ESP-NOW MQTT Remote
 
+## Introduction
+
+This project is based off the Everything Remote by The Stockpot. It utilizes the same printed PCB and Lolin ESP32 Lite for the remote as well as his remote enclosure.
+
+I was frustrated with the initial responsiveness of the remote and connecting via wifi along with clunky ESPHome YAML, so I decided to move to a base station design that greatly improves responsiveness. Essentially making the time between button press and response instantaneous. I further improved this response time. A [.3mf file](ESP32%20Ethernet%20Housing.3mf) is also included with an enclosure that I designed for the WT32-ETH01 and a [PD Trigger Module](https://www.aliexpress.us/item/3256807449010017.html?spm=a2g0o.order_list.order_list_main.10.4de218027f5mg9&gatewayAdapt=glo2usa) for power.
+
 Physical remote controls that drive Home Assistant over ESP-NOW and MQTT.
 
 ```
@@ -20,6 +26,12 @@ hub's address off its boot log so you never transcribe a MAC by hand.
 
 ```bash
 python3 tools/flasher/app.py
+```
+
+If you need to close the application, use this.
+
+```bash
+pkill -f flasher/app.py
 ```
 
 That opens `http://127.0.0.1:8765` in your browser. Its only prerequisite is
